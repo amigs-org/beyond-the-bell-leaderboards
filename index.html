@@ -117,29 +117,47 @@ const pv=f=>{const b=cur(),e=$('#pv');if(b&&e)swapLb(e,lbH(b,true),false,!f)};
 function seed(){if(S.seeded||S.boards.length)return;S.seeded=1;const n=['Amara Okafor','Liam Chen','Sofia Rossi','Noah Patel','Zara Ahmed','Ethan Brooks','Mia Johansson','Oliver Hughes','Isla Campbell','Lucas Meyer','Ava Thompson','Jack Wilson'],h=['Falcon','Otter','Falcon','Lynx','Otter','Lynx','Falcon','Otter','Lynx','Falcon','Otter','Lynx'],sc=[482,471,471,455,440,432,418,401,395,380,362,340],pr=[2,1,3,5,4,7,6,8,10,9,11,12];
  const b={id:uid(),name:'SAMPLE DATA: House Cup 2026',created:Date.now(),modified:Date.now(),fav:1,extra:['Year'],s:defS(),rows:n.map((x,i)=>({id:uid(),name:x,score:sc[i],cat:h[i],img:'',prev:pr[i],x:{Year:'Year '+(7+i%4)}}))};b.s.title='House Cup 2026';b.s.sub='Sample data: replace by importing your own spreadsheet';b.s.mode='podium';S.boards.push(b);save()}
 // ---------- import
-function sheetTpl(){const ws=XLSX.utils.aoa_to_sheet([['Name','Total Points','House','Year'],['Alex Smith',120,'Falcon','Year 9'],['Priya Shah',135,'Otter','Year 8'],['Sam Lee',98,'Lynx','Year 9'],['Jo Ng','','Falcon','Year 8']]),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Scores');XLSX.writeFile(wb,'rankforge-template.xlsx')}
-function load(f){if(!ADM)return;const fr=new FileReader();fr.onload=e=>{try{const wb=XLSX.read(e.target.result,{type:'array'});V.imp={wb,file:f.name,sheet:wb.SheetNames[0],target:'new',dup:'first',skip:true,mode:'match'};pick();render()}catch(x){toast('Could not read file: '+x.message)}};fr.onerror=()=>toast('File read failed');fr.readAsArrayBuffer(f)}
-function pick(){const I=V.imp,a=XLSX.utils.sheet_to_json(I.wb.Sheets[I.sheet],{header:1,defval:'',blankrows:false});I.err='';I.hdr=[];I.rows=[];
- if(a.length<2){I.err='This sheet has no data rows. Pick another worksheet.';return}
- I.hdr=a[0].map((h,i)=>String(h||'').trim()||'Column '+(i+1));I.rows=a.slice(1);
- const f=re=>I.hdr.findIndex(h=>re.test(h));let sc=f(/score|point|total|mark|result/i);
- if(sc<0)sc=I.hdr.findIndex((h,i)=>I.rows.some(r=>r[i]!=='')&&I.rows.slice(0,30).every(r=>r[i]===''||!isNaN(parseFloat(r[i]))));
- let nm=f(/name|student|participant|player|team/i);if(nm<0)nm=I.hdr.findIndex((h,i)=>i!==sc);
- I.m={name:nm,score:sc,cat:f(/categor|group|year|house|class|form/i),img:-1,extra:[]};I.bname=I.file.replace(/\.\w+$/,'')}
-function check(){const I=V.imp,m=I.m,o={miss:0,bad:0,dup:0,blank:0,ok:[],iss:[]},seen={};if(m.name<0||m.score<0)return o;
- I.rows.forEach((r,i)=>{const n=String(r[m.name]??'').trim(),raw=r[m.score],bl=String(raw??'').trim()==='',sc=bl?0:parseFloat(String(raw).replace(/,/g,''));if(bl&&n)o.blank++;
-  if(!n){o.miss++;o.iss.push(`Row ${i+2}: missing name`);if(I.skip)return}else if(isNaN(sc)){o.bad++;o.iss.push(`Row ${i+2} (${n}): score "${raw}" is not a number`);if(I.skip)return}
-  const e={id:uid(),name:n||'Unnamed',score:isNaN(sc)?0:sc,cat:m.cat>=0?String(r[m.cat]).trim():'',img:m.img>=0?String(r[m.img]).trim():'',x:{}};I.hdr.forEach((h,c)=>{if(m.extra.includes(c))e.x[h]=r[c]});
-  const k=e.name.toLowerCase();if(seen[k]){o.dup++;o.iss.push(`Row ${i+2}: duplicate "${e.name}"`);if(I.dup==='first')return;if(I.dup==='sum'){seen[k].score+=e.score;return}}
-  seen[k]=e;o.ok.push(e)});return o}
-function commit(){if(!ADM)return;const I=V.imp,o=check(),ex=I.m.extra.map(c=>I.hdr[c]);if(!o.ok.length)return toast('Nothing valid to import');let b;
- if(I.target==='new'){b={id:uid(),name:I.bname||'Untitled',created:Date.now(),modified:Date.now(),fav:0,rows:o.ok,extra:ex,s:defS()};b.s.title=b.name;S.boards.unshift(b)}
- else{b=S.boards.find(x=>x.id===I.target);const pr={};ranked(b).forEach(r=>pr[r.name.toLowerCase()]=r.rank),idx={};b.rows.forEach(r=>idx[r.name.toLowerCase()]=r);
-  const nr=o.ok.map(e=>{const old=idx[e.name.toLowerCase()];if(!old)return e;Object.assign(old,{score:e.score,cat:e.cat||old.cat,img:e.img||old.img,x:{...old.x,...e.x}});return old});
-  b.rows=I.mode==='replace'?nr:[...b.rows.filter(r=>!nr.includes(r)),...nr];b.extra=[...new Set([...(b.extra||[]),...ex])];b.rows.forEach(r=>r.prev=pr[r.name.toLowerCase()]);b.modified=Date.now()}
- b.map={sheet:I.sheet,name:I.hdr[I.m.name],score:I.hdr[I.m.score],cat:I.m.cat>=0?I.hdr[I.m.cat]:'',extra:ex};S.imps.unshift({file:I.file,sheet:I.sheet,n:o.ok.length,date:Date.now(),board:b.name});S.imps=S.imps.slice(0,20);save();V.id=b.id;V.v='editor';V.imp=null;render();toast(`Imported ${o.ok.length} participants (this session only: not yet saved to Supabase)`)}
-// ---------- views
-const nav=[['dash','home','Dashboard'],['boards','list','My Leaderboards'],['import','plus','Create Leaderboard'],['themes','pal','Themes'],['imports','up','Imports'],['set','set','Settings']];
+// ---------- Excel workbook import: validated here, saved to Supabase only after confirmation
+const HTN=['HT2','HT3','HT4','HT5','HT6'];
+const normName=s=>String(s??'').normalize('NFC').replace(/[\u200B-\u200D\uFEFF]/g,'').replace(/\u00A0/g,' ').replace(/\s+/g,' ').trim();
+const emsg=e=>{const c=e&&e.code;return c==='42501'?'permission denied (administrator only)':c==='23505'?'that student already exists':scrub(e&&e.message||e||'unknown error')};
+function sheetTpl(){const wb=XLSX.utils.book_new();[7,8,9,10,11].forEach(y=>{XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['Name','HT2','HT3','HT4','HT5','HT6','FULL YEAR'],['Alex Smith',10,12,8,15,9],['Priya Shah',14,11,13,10,12]]),'Year '+y)});XLSX.writeFile(wb,'rankforge-template.xlsx')}
+function sheetYear(n){const m=String(n).match(/(?:^|[^0-9])(7|8|9|10|11)(?![0-9])/);return m?+m[1]:null}
+function findHeader(a){for(let i=0;i<Math.min(a.length,15);i++){const hd=(a[i]||[]).map(c=>String(c??'').trim()),ni=hd.findIndex(c=>/^(student(\s*name)?|pupil(\s*name)?|name|full\s*name)$/i.test(c)),ci={};
+  hd.forEach((c,k)=>{const m=c.match(/^(?:h\.?\s*t\.?\s*|half\s*term\s*)([2-6])$/i);if(m)ci['HT'+m[1]]=k});
+  if(ni>=0&&Object.keys(ci).length)return{row:i,ni,ci}}return null}
+function planImport(wb){const b=gb(),ex={};(b?b.rows:[]).forEach(r=>{ex[r.yg+'|'+r.name.toLowerCase()]=r});
+ const P={sheets:[],items:[],invalid:0,dups:0,skipped:0,issues:[]},seen={};
+ wb.SheetNames.forEach(sn=>{const T={name:sn,yg:sheetYear(sn),rows:0,n:0,u:0,same:0,bad:0,note:''};P.sheets.push(T);
+  if(!T.yg){T.note='Skipped: no year group (7\u201311) in the sheet name';P.skipped++;return}
+  const a=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:'',blankrows:false}),H=findHeader(a);
+  if(!H){T.note='Skipped: no Name column with HT headers';P.skipped++;return}
+  const miss=HTN.filter(k=>H.ci[k]===undefined);if(miss.length){T.note='Skipped: missing column '+miss.join(', ');P.skipped++;return}
+  for(let i=H.row+1;i<a.length;i++){const r=a[i],name=normName(r[H.ni]);if(!name)continue;T.rows++;
+   const ht={};let bad='';for(const k of HTN){const raw=r[H.ci[k]],t=String(raw??'').trim(),v=t===''?0:Number(t.replace(/,/g,''));if(!Number.isInteger(v)||Math.abs(v)>100000){bad=`${k} "${String(raw).slice(0,20)}" is not a whole number`;break}ht[k.toLowerCase()]=v}
+   if(bad){T.bad++;P.invalid++;P.issues.push(`${sn} row ${i+1} (${name}): ${bad}`);continue}
+   const key=T.yg+'|'+name.toLowerCase();if(seen[key]){P.dups++;T.bad++;P.issues.push(`${sn} row ${i+1}: duplicate "${name}" (first entry kept)`);continue}
+   const old=ex[key],it={name:old?old.name:name,yg:T.yg,ht,old};seen[key]=1;
+   if(!old){T.n++;it.st='new'}else if(HTN.some(k=>old.x[k]!==ht[k.toLowerCase()])){T.u++;it.st='update'}else{T.same++;it.st='same'}
+   P.items.push(it)}});
+ P.seenKeys=seen;P.years=[...new Set(P.sheets.filter(s=>s.yg&&!s.note).map(s=>s.yg))];return P}
+async function savePlan(P,o={}){if(!ADM||!sb)return{ok:false,saved:0,msg:'Administrator access required'};
+ const work=P.items.filter(i=>i.st!=='same');let saved=0,nw=0,up=0,removed=0;
+ try{for(let i=0;i<work.length;i+=500){const ch=work.slice(i,i+500),pay=ch.map(x=>({student_name:x.name,year_group:x.yg,...x.ht}));
+   const{data,error}=await sb.from('student_points').upsert(pay,{onConflict:'student_name,year_group'}).select('id');
+   if(error)throw error;if(!data||data.length!==ch.length)throw new Error('Supabase confirmed '+(data?data.length:0)+' of '+ch.length+' rows');
+   saved+=ch.length;ch.forEach(x=>x.st==='new'?nw++:up++)}
+  if(o.rm){const ids=gb().rows.filter(r=>P.years.includes(r.yg)&&!P.seenKeys[r.yg+'|'+r.name.toLowerCase()]).map(r=>Number(r.id));
+   for(let i=0;i<ids.length;i+=200){const c=ids.slice(i,i+200),{data,error}=await sb.from('student_points').delete().in('id',c).select('id');
+    if(error)throw error;if(!data||data.length!==c.length)throw new Error('Supabase confirmed only '+(data?data.length:0)+' of '+c.length+' deletions');removed+=c.length}}
+  await refreshNow();return{ok:true,saved,nw,up,removed}}
+ catch(e){try{await refreshNow()}catch(_){}return{ok:false,saved,nw,up,removed,msg:emsg(e)}}}
+function load(f){if(!ADM)return;const fr=new FileReader();fr.onload=e=>{try{const wb=XLSX.read(e.target.result,{type:'array'});V.imp={file:f.name,wb,rm:false,ok:false,busy:false,res:null};V.imp.plan=planImport(wb);render()}catch(x){toast('Could not read file: '+emsg(x))}};fr.onerror=()=>toast('File read failed');fr.readAsArrayBuffer(f)}
+async function saveImport(){const I=V.imp;if(!I||I.busy||!ADM)return;I.busy=true;I.res=null;render();
+ try{await refreshNow()}catch(e){}I.plan=planImport(I.wb);const P=I.plan,rm=I.rm&&I.ok&&P.invalid===0&&P.skipped===0;
+ const r=await savePlan(P,{rm});I.busy=false;I.res=r;
+ if(r.ok){S.imps.unshift({file:I.file,sheet:'all years',n:r.saved,date:Date.now(),board:'Leaderboard'});S.imps=S.imps.slice(0,20);save();I.plan=planImport(I.wb);I.rm=false;I.ok=false}
+ render();toast(r.ok?`Saved ${r.saved} student${r.saved===1?'':'s'} to Supabase`:'Import not fully saved: '+r.msg)}
 const side=()=>`<nav class="side"><div class="logo"><i>🏆</i>RankForge</div>${nav.map(n=>`<button class="nav ${V.v===n[0]||(V.v==='editor'&&n[0]==='boards')?'on':''}" data-a="nav:${n[0]}">${ic(n[1])}${n[2]}</button>`).join('')}<button class="nav" style="margin-top:auto" data-a="logout">Sign out</button></nav>`;
 const th=b=>`<div class="th"><div>${lbH(b,false)}</div></div>`;
 const bcard=b=>`<div class="card">${th(b)}<div class="row"><b class="sp">${esc(b.name)}</b><button class="btn s" data-a="fav:${b.id}" title="Favourite" style="${b.fav?'color:#f5b301':''}">${ic('star')}</button></div><div style="color:var(--m);font-size:12px;margin:4px 0 10px">${b.rows.length} participants · Created ${dt(b.created)} · Edited ${dt(b.modified)}</div><div class="row"><button class="btn s p" data-a="open:${b.id}">Edit</button><button class="btn s" data-a="dup:${b.id}">${ic('copy')}Duplicate</button><button class="btn s" data-a="del:${b.id}">${ic('del')}</button></div></div>`;
@@ -158,18 +176,17 @@ function main(){const B=S.boards;
  if(V.v==='set')return `<h2>Settings</h2><p class="sb">Shared design and student data are stored in Supabase.</p><div class="card" style="max-width:520px"><div class="row"><span class="sp">Dark mode</span><input type="checkbox" data-a="dark" ${S.dark?'checked':''}></div><hr style="border:0;border-top:1px solid var(--l)"><div class="row"><span class="sp">Example import spreadsheet</span><button class="btn s" data-a="tpl">${ic('dl')}Download</button></div><hr style="border:0;border-top:1px solid var(--l)"><div class="row"><span class="sp"><b>Account</b><br><small style="color:var(--m)">Signed in as ${ADM?'administrator':'viewer'}</small></span><button class="btn s" data-a="logout">Sign out</button></div><hr style="border:0;border-top:1px solid var(--l)"><div class="row"><span class="sp">Clear saved themes and import history</span><button class="btn s" data-a="wipe">${ic('del')}Reset everything</button></div></div>`;
  if(V.v==='editor'&&cur())return editor(cur());V.v='dash';return main()}
 const impList=()=>S.imps.length?`<div class="card"><table>${S.imps.slice(0,10).map(i=>`<tr><td>${esc(i.file)} <span style="color:var(--m)">(${esc(i.sheet)})</span></td><td>${i.n} rows</td><td>→ ${esc(i.board)}</td><td>${dt(i.date)}</td></tr>`).join('')}</table></div>`:empty('No imports yet.');
-function impV(){const I=V.imp;if(!I)return `<h2>Create Leaderboard</h2><p class="sb">Upload an Excel or CSV file; we’ll detect the columns and walk you through the rest.</p><label class="drop" id="drop" style="display:block"><div style="font-size:34px">📄</div><b>Drop a .xlsx, .xls or .csv file here</b><div style="color:var(--m)">or click to browse</div><input type="file" accept=".xlsx,.xls,.csv" data-f="imp" hidden></label><p><button class="btn" data-a="tpl">${ic('dl')}Download example spreadsheet</button></p>`;
- const m=I.m,o=check(),opt=(sel,none)=>(none?`<option value="-1">${none}</option>`:'')+(I.hdr||[]).map((h,i)=>`<option value="${i}" ${sel===i?'selected':''}>${esc(h)}</option>`).join('');
- return `<h2>Import: ${esc(I.file)}</h2><p class="sb">Check the mapping, review issues, then create.</p>
- <div class="card imp"><label>Worksheet<select data-i="sheet">${I.wb.SheetNames.map(s=>`<option ${s===I.sheet?'selected':''}>${esc(s)}</option>`).join('')}</select></label>
- ${I.err?`<div class="iss">${I.err}</div>`:`<label>Name column<select data-i="m.name">${opt(m.name)}</select></label><label>Score column<select data-i="m.score">${opt(m.score)}</select></label><label>Category / group<select data-i="m.cat">${opt(m.cat,'— none —')}</select></label><label style="display:none"><select data-i="m.img">${opt(m.img,'— none —')}</select></label>
- <label style="grid-column:1/-1">Additional columns to show<div class="row">${I.hdr.map((h,i)=>[m.name,m.score,m.cat,m.img].includes(i)?'':`<label style="display:inline-flex;gap:4px"><input type="checkbox" data-x="${i}" ${m.extra.includes(i)?'checked':''}>${esc(h)}</label>`).join('')}</div></label>
- <label>Invalid rows<select data-i="skip"><option value="1" ${I.skip?'selected':''}>Skip them</option><option value="0" ${I.skip?'':'selected'}>Import with fixes (Unnamed / 0)</option></select></label><label>Duplicate names<select data-i="dup">${[['first','Keep first'],['sum','Add scores together'],['keep','Keep all']].map(d=>`<option value="${d[0]}" ${I.dup===d[0]?'selected':''}>${d[1]}</option>`).join('')}</select></label>
- <label>Destination<select data-i="target"><option value="new">New leaderboard</option>${S.boards.map(b=>`<option value="${b.id}" ${I.target===b.id?'selected':''}>Update: ${esc(b.name)}</option>`).join('')}</select></label>
- ${I.target==='new'?`<label>Leaderboard name<input data-i="bname" value="${esc(I.bname)}"></label>`:`<label>Update mode (matched by name)<select data-i="mode"><option value="match" ${I.mode==='match'?'selected':''}>Update matches, keep others</option><option value="replace" ${I.mode==='replace'?'selected':''}>Replace all data</option></select></label>`}`}</div>
- ${I.err?'':`<p><b>${o.ok.length}</b> valid rows · <span class="iss">${o.blank} blank scores kept as 0 · ${o.miss} missing names · ${o.bad} invalid scores · ${o.dup} duplicates</span></p>${o.iss.length?`<div class="iss">${o.iss.slice(0,6).map(esc).join('<br>')}${o.iss.length>6?`<br>…and ${o.iss.length-6} more`:''}</div>`:''}
- <div class="sc2"><table><tr>${I.hdr.map(h=>`<th>${esc(h)}</th>`).join('')}</tr>${I.rows.slice(0,8).map(r=>`<tr>${I.hdr.map((h,i)=>`<td>${esc(r[i])}</td>`).join('')}</tr>`).join('')}</table></div><p style="color:var(--m);font-size:12px">Preview of the first 8 of ${I.rows.length} rows. Fine-tune any value in the editor afterwards.</p>`}
- <div class="row"><button class="btn p" data-a="commit" ${I.err||!o.ok.length?'disabled':''}>Create leaderboard</button><button class="btn" data-a="cancelimp">Cancel</button></div>`}
+function impV(){const I=V.imp;
+ if(!I)return `<h2>Import workbook</h2><p class="sb">Upload the Excel workbook with one sheet per year group (Year 7 to Year 11). Each sheet needs a Name column and HT2\u2013HT6 columns. FULL YEAR is calculated by the database and is never uploaded.</p><label class="drop" id="drop" style="display:block"><div style="font-size:34px">\ud83d\udcc4</div><b>Drop a .xlsx or .xls workbook here</b><div style="color:var(--m)">or click to browse</div><input type="file" accept=".xlsx,.xls" data-f="imp" hidden></label><p><button class="btn" data-a="tpl">${ic('dl')}Download example workbook</button></p>`;
+ const P=I.plan,b=gb(),work=P.items.filter(i=>i.st!=='same').length,canRm=P.invalid===0&&P.skipped===0&&P.years.length>0,R=I.res,
+  rmN=canRm&&b?b.rows.filter(r=>P.years.includes(r.yg)&&!P.seenKeys[r.yg+'|'+r.name.toLowerCase()]).length:0;
+ return `<h2>Import: ${esc(I.file)}</h2><p class="sb">Review the sheets, then save. Nothing is written to Supabase until you click Save.</p>
+ <div class="card" style="overflow:auto"><table><tr><th>Sheet</th><th>Year</th><th>Rows</th><th>New</th><th>Updated</th><th>Unchanged</th><th>Problems</th></tr>${P.sheets.map(s=>`<tr><td>${esc(s.name)}</td><td>${s.yg??'\u2013'}</td><td>${s.rows}</td><td>${s.n}</td><td>${s.u}</td><td>${s.same}</td><td>${s.note?`<span class="iss">${esc(s.note)}</span>`:s.bad}</td></tr>`).join('')}</table></div>
+ ${P.issues.length?`<div class="iss">${P.issues.slice(0,8).map(x=>esc(x)).join('<br>')}${P.issues.length>8?`<br>\u2026and ${P.issues.length-8} more`:''}</div>`:''}
+ <p><b>${work}</b> student${work===1?'':'s'} will be written (new or changed). Students missing from the workbook are <b>not</b> deleted unless you choose below.</p>
+ ${rmN?`<label style="display:block"><input type="checkbox" data-i="rm" ${I.rm?'checked':''}> Also remove ${rmN} student${rmN===1?'':'s'} in Year ${P.years.join(', ')} who are not in this workbook</label>${I.rm?`<label style="display:block;color:#dc2626"><input type="checkbox" data-i="ok" ${I.ok?'checked':''}> I understand these ${rmN} records will be permanently deleted</label>`:''}`:''}
+ ${R?`<div class="card" style="margin:10px 0;border-color:${R.ok?'#16a34a':'#dc2626'}">${R.ok?`Saved to Supabase: ${R.nw} new, ${R.up} updated${R.removed?`, ${R.removed} removed`:''}.`:`Not fully saved: ${esc(R.msg)}${R.saved?` (${R.saved} students were saved before the error)`:''}`}</div>`:''}
+ <div class="row"><button class="btn p" data-a="commit" ${I.busy||(!work&&!(I.rm&&I.ok&&rmN))?'disabled':''}>${I.busy?'Saving\u2026':'Save to Supabase'}</button><button class="btn" data-a="cancelimp">${R&&R.ok?'Done':'Cancel'}</button></div>`}
 const col=(k,l,s)=>`<label>${l}<input type="color" data-k="${k}" value="${s[k]}"></label>`,rg=(k,l,a,z,s,st=1)=>`<label>${l}<input type="range" data-k="${k}" min="${a}" max="${z}" step="${st}" value="${s[k]}"></label>`,tx=(k,l,s)=>`<label>${l}<input data-k="${k}" value="${esc(s[k])}"></label>`,sel=(k,l,o,s)=>`<label>${l}<select data-k="${k}">${o.map(x=>`<option value="${x[0]}" ${String(s[k])===x[0]?'selected':''}>${x[1]}</option>`).join('')}</select></label>`;
 function editor(b){const s=b.s;return `<div class="eh"><input class="tt" data-n="1" value="${esc(b.name)}"><span class="sp"></span>${b.id==='global'?`<span id="sv" style="font-size:12px;color:var(--m)">Design synced</span><button class="btn" data-a="savenow">Save design</button>`:''}<button class="btn" data-a="pres">${ic('play')}Present</button><button class="btn" data-a="nav:boards">Done</button></div>
  <div class="ed"><aside class="pn"><details open><summary>Theme</summary>${sel('theme','Preset',Object.keys(PRE).map(n=>[n,n[0].toUpperCase()+n.slice(1)]),s)}<label>Saved<select data-st="1"><option value="">— choose —</option>${S.themes.map((t,i)=>`<option value="${i}">${esc(t.name)}</option>`).join('')}</select></label><button class="btn s" data-a="savetheme">Save current as theme</button></details>
@@ -180,7 +197,7 @@ function editor(b){const s=b.s;return `<div class="eh"><input class="tt" data-n=
  <section class="cn"><div id="pv"></div></section>
  <aside class="pn"><details open><summary>Ranking & filters</summary>${sel('order','Order',[['desc','Highest first'],['asc','Lowest first']],s)}<label>Search<input data-q="1" value="${esc(V.q)}" placeholder="Name…"></label><label>Category<select data-c="1"><option value="">All</option>${[...new Set(b.rows.map(r=>r.cat).filter(Boolean))].map(c=>`<option ${V.cat===c?'selected':''}>${esc(c)}</option>`).join('')}</select></label></details>
  <details><summary>Visible columns</summary>${[['rank','Rank badge'],['cat','Category'],['mv','Movement'],...(b.extra||[]).map(c=>['x:'+c,c])].map(c=>`<label>${esc(c[1])}<input type="checkbox" data-h="${esc(c[0])}" ${s.hid[c[0]]?'':'checked'}></label>`).join('')}</details>
- <details open><summary>Participants (${b.rows.length})</summary><p class="iss">Student edits are not saved to Supabase yet (session only).</p><div class="sc2"><table>${b.rows.slice(0,200).map(r=>`<tr><td><input data-r="${r.id}|name" value="${esc(r.name)}" style="width:96px"></td><td><input data-r="${r.id}|score" type="number" value="${r.score}" style="width:60px"></td><td><input data-r="${r.id}|cat" value="${esc(r.cat)}" style="width:62px"></td><td><label style="display:none">🖼<input type="file" accept="image/*" data-f="av:${r.id}" hidden></label></td><td><button class="btn s" data-a="delrow:${r.id}">×</button></td></tr>`).join('')}</table></div>${b.rows.length>200?'<small>Showing first 200 rows.</small>':''}<div class="row" style="margin-top:8px"><button class="btn s p" data-a="addrow">Add participant</button><button class="btn s" data-a="clrscore">Zero scores</button><button class="btn s" data-a="clrall">Clear all</button><button class="btn s" data-a="resetd">Reset design</button><button class="btn s" data-a="upd">Import update</button></div><div class="row" style="margin-top:8px">${V.lk&&V.lk.id===b.id?`<span class="sp" style="font-size:12px;color:#16a34a">● Live: ${esc(V.lk.name)}</span><button class="btn s" data-a="unlink">Unlink</button>`:`<button class="btn s p" data-a="linkfile">Link live spreadsheet file</button>`}</div><p style="color:var(--m);font-size:11px">A linked file is checked twice a second: save the sheet in Excel and the leaderboard, including Present mode, updates. Names are matched; blank scores count as 0.</p></details>
+ <details open><summary>Participants (${b.rows.length})</summary><div class="sc2"><table id="ptab">${ptab(b)}</table></div><div class="row" style="margin-top:8px"><input id="anm" placeholder="New student name" style="flex:1;min-width:80px"><select id="ayg">${[7,8,9,10,11].map(y=>`<option>${y}</option>`).join('')}</select><button class="btn s p" data-a="addrow">Add</button></div><div class="row" style="margin-top:8px"><button class="btn s" data-a="clrscore">Zero scores</button><button class="btn s" data-a="clrall">Clear all</button><button class="btn s" data-a="resetd">Reset design</button><button class="btn s" data-a="upd">Import update</button></div><div class="row" style="margin-top:8px">${V.lk&&V.lk.id===b.id?`<span class="sp" style="font-size:12px;color:#16a34a">● Live: ${esc(V.lk.name)}</span><button class="btn s" data-a="unlink">Unlink</button>`:`<button class="btn s p" data-a="linkfile">Link live spreadsheet file</button>`}</div><p style="color:var(--m);font-size:11px">A linked file is checked twice a second: save the sheet in Excel and the leaderboard, including Present mode, updates. Names are matched; blank scores count as 0.</p></details>
  <details open><summary>Export & share</summary><div class="row"><button class="btn s" data-a="x:png">PNG</button><button class="btn s" data-a="x:pdf">PDF / Print</button><button class="btn s" data-a="x:csv">CSV</button><button class="btn s" data-a="x:xlsx">Excel</button><button class="btn s" data-a="x:html">Public HTML</button></div><p style="color:var(--m);font-size:12px">“Public HTML” downloads a static read-only snapshot you can host yourself.</p></details></aside></div>`}
 // ---------- exports
 const dl=(blob,n)=>{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=n;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000)};
@@ -206,17 +223,12 @@ function runAn(root,ky){clrAn();const lb=root&&root.querySelector('.lb'),L=lb&&l
 // ---------- presentation
 // ---------- live spreadsheet link (File System Access API) + live presentation updates
 V.lk=null;
-function parseWith(wb,mp){const ws=wb.Sheets[mp.sheet]||wb.Sheets[wb.SheetNames[0]],a=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',blankrows:false});if(a.length<2)return[];
- const hd=a[0].map(h=>String(h||'').trim()),ix=n=>n?hd.indexOf(n):-1,ni=ix(mp.name),si=ix(mp.score),ci=ix(mp.cat);if(ni<0||si<0)throw new Error('Columns "'+mp.name+'" / "'+mp.score+'" not found in the file');
- const xs=(mp.extra||[]).map(n=>[n,ix(n)]),seen=new Set(),out=[];
- a.slice(1).forEach(r=>{const n=String(r[ni]??'').trim();if(!n||seen.has(n.toLowerCase()))return;seen.add(n.toLowerCase());const raw=String(r[si]??'').trim(),sc=raw===''?0:parseFloat(raw.replace(/,/g,''));out.push({name:n,score:isNaN(sc)?0:sc,cat:ci>=0?String(r[ci]).trim():'',x:Object.fromEntries(xs.filter(p=>p[1]>=0).map(p=>[p[0],r[p[1]]]))})});return out}
-function liveApply(b,ents){if(!ADM)return 0;const pr={},idx={};ranked(b).forEach(r=>pr[r.name.toLowerCase()]=r.rank);b.rows.forEach(r=>idx[r.name.toLowerCase()]=r);let ch=0;
- ents.forEach(e=>{const o=idx[e.name.toLowerCase()];if(o){if(+o.score!==e.score||(e.cat&&o.cat!==e.cat))ch++;Object.assign(o,{score:e.score,cat:e.cat||o.cat,x:{...o.x,...e.x}})}else{b.rows.push({id:uid(),img:'',...e});ch++}});
- if(ch){b.rows.forEach(r=>r.prev=pr[r.name.toLowerCase()]);touch(b)}return ch}
-async function liveRead(){const k=V.lk;if(!k||k.busy)return;k.busy=1;const b=S.boards.find(x=>x.id===k.id);if(!b)return unlink();
- try{const f=await k.h.getFile();if(f.lastModified===k.last&&f.size===k.size)return;k.last=f.lastModified;k.size=f.size;const wb=XLSX.read(await f.arrayBuffer(),{type:'array'}),n=liveApply(b,parseWith(wb,b.map));
-  if(V.pres)presUpdate();else if(n&&V.v==='editor'&&V.id===b.id){if(document.querySelectorAll('[data-r$="|name"]').length!==Math.min(b.rows.length,200))render();else{b.rows.forEach(r=>['name','score','cat'].forEach(f=>{const i=document.querySelector('[data-r="'+r.id+'|'+f+'"]');if(i&&document.activeElement!==i)i.value=r[f]}));pv(1)}}}catch(e){if(!k.warned){k.warned=1;toast('Linked file: '+e.message)}}finally{k.busy=0}}
-async function linkFile(b){if(!ADM)return;if(!b.map)return toast('Import a spreadsheet into this board first (Create → Update existing) so the columns are known');
+async function liveRead(){const k=V.lk;if(!k||k.busy)return;k.busy=1;
+ try{const f=await k.h.getFile();if(f.lastModified===k.last&&f.size===k.size)return;k.last=f.lastModified;k.size=f.size;
+  const wb=XLSX.read(await f.arrayBuffer(),{type:'array'});await refreshNow();const P=planImport(wb);
+  if(P.items.some(i=>i.st!=='same')){const r=await savePlan(P,{});toast(r.ok?`Synced ${r.saved} changed row${r.saved===1?'':'s'} from linked file`:'Linked file not saved: '+r.msg)}}
+ catch(e){if(!k.warned){k.warned=1;toast('Linked file: '+emsg(e))}}finally{k.busy=0}}
+async function linkFile(b){if(!ADM)return;
  if(!window.showOpenFilePicker)return toast('Live file link needs Chrome or Edge on desktop. Elsewhere, use “Import update”.');
  try{const[h]=await showOpenFilePicker({types:[{description:'Spreadsheets',accept:{'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':['.xlsx'],'application/vnd.ms-excel':['.xls'],'text/csv':['.csv']}}]});unlink(1);V.lk={id:b.id,h,last:0,size:-1,name:h.name};V.lk.tm=setInterval(liveRead,500);await liveRead();render();toast('Linked to '+h.name+'. Saved changes appear instantly')}catch(e){if(e.name!=='AbortError')toast('Could not link file: '+e.message)}}
 function unlink(q){if(V.lk){clearInterval(V.lk.tm);V.lk=null}if(!q)render()}
@@ -266,31 +278,31 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-a]');if(!t
  else if(a==='del'){const x=S.boards.find(b=>b.id===g);if(g==='global')return toast('The shared leaderboard can’t be deleted');S.boards=S.boards.filter(b=>b.id!==g);save();render()}
  else if(a==='delth'){S.themes.splice(+g,1);save();render()}else if(a==='tpl')sheetTpl();
  else if(a==='wipe'){S.themes=[];S.imps=[];save();render()}
- else if(a==='commit')commit();else if(a==='cancelimp'){V.imp=null;render()}
+ else if(a==='commit')saveImport();else if(a==='cancelimp'){V.imp=null;V.v='editor';V.id='global';render()}
  else if(a==='pres'){V.pres=true;pres();document.documentElement.requestFullscreen?.().catch(()=>{})}else if(a==='exitp')exitp();
  else if(a==='savetheme'){const n=prompt('Theme name?');if(n){const{title,sub,foot,date,logo,bgimg,...th}=b.s;S.themes.push({name:n,s:JSON.parse(JSON.stringify(th))});save();render();toast('Theme saved')}}
  else if(a==='clrimg'){b.s.logo=b.s.bgimg='';touch(b);pv()}
- else if(a==='addrow'){b.rows.unshift({id:uid(),name:'New participant',score:0,cat:'',img:'',x:{}});touch(b);render()}
- else if(a==='delrow'){b.rows=b.rows.filter(r=>r.id!==g);touch(b);render()}
- else if(a==='clrscore'){b.rows.forEach(r=>{r.prev=undefined;r.score=0});touch(b);render()}else if(a==='clrall'){b.rows=[];touch(b);render()}
+ else if(a==='addrow')addRow();
+ else if(a==='delrow')delRow(g);
+ else if(a==='clrscore')bulkDb('zero');else if(a==='clrall')bulkDb('clear');
  else if(a==='resetd'){const k=b.s;b.s={...defS(),title:k.title,sub:k.sub,foot:k.foot,date:k.date};touch(b);render()}
  else if(a==='upd'){V.imp=null;V.v='import';V.upd=b.id;render()}else if(a==='x')exp(g);else if(a==='logout')logout();else if(a==='signin')signIn();else if(a==='savenow')saveSet();else if(a==='linkfile')linkFile(b);else if(a==='unlink')unlink()});
 document.addEventListener('input',e=>{const t=e.target,b=cur(),d=t.dataset;if(!ADM&&d.vq===undefined&&d.vc===undefined&&t.id!=='auto')return;
  if(d.a==='dark'){S.dark=t.checked;save();render();return}
  
  if(d.vq!==undefined||d.vc!==undefined){if(d.vq!==undefined)V.q=t.value;else V.cat=t.value;const p=$('#pv');if(p&&gb())swapLb(p,lbH(gb(),true),false,true);return}
- if(d.i!==undefined){const I=V.imp,k=d.i;if(k==='sheet'){I.sheet=t.value;pick()}else if(k.startsWith('m.'))I.m[k.slice(2)]=+t.value,I.m.extra=I.m.extra.filter(c=>![I.m.name,I.m.score,I.m.cat,I.m.img].includes(c));else if(k==='skip')I.skip=t.value==='1';else I[k]=t.value;if(k!=='bname')render();return}
- if(d.x!==undefined){const I=V.imp,c=+d.x;I.m.extra=t.checked?[...I.m.extra,c]:I.m.extra.filter(x=>x!==c);return}
+ if(d.i!==undefined){const I=V.imp;if(!I)return;if(d.i==='rm'){I.rm=t.checked;if(!t.checked)I.ok=false}else if(d.i==='ok')I.ok=t.checked;render();return}
+ 
  if(!b)return;
  if(d.n){b.name=t.value;touch(b)}
  else if(d.k){const s=b.s;let v=t.type==='range'?+t.value:t.type==='checkbox'?t.checked:t.value;if(d.k==='theme'){pre(s,v);touch(b);render();return}s[d.k]=v;touch(b);pv()}
  else if(d.st!==undefined&&t.value!==''){const th=S.themes[+t.value];Object.assign(b.s,JSON.parse(JSON.stringify(th.s)));touch(b);render()}
  
  else if(d.h){b.s.hid[d.h]=!t.checked;touch(b);pv()}
- else if(d.r){const[id,f]=d.r.split('|'),r=b.rows.find(x=>x.id===id);r[f]=f==='score'?(t.value===''?0:+t.value):t.value;touch(b);pv(1)}
- else if(d.q!==undefined){V.q=t.value;pv()}else if(d.c!==undefined){V.cat=t.value;pv()}
+ 
+ else if(d.q!==undefined){V.q=t.value;pv();ptabR()}else if(d.c!==undefined){V.cat=t.value;pv();ptabR()}
  else if(t.id==='auto'){V.auto=t.checked;pres()}});
-document.addEventListener('change',e=>{const t=e.target,f=t.dataset.f,b=cur();if(!ADM||!f||!t.files[0])return;
+document.addEventListener('change',e=>{const t=e.target,f=t.dataset.f,b=cur();if(t.dataset.ht!==undefined){htEdit(t);return}if(!ADM||!f||!t.files[0])return;
  if(f==='imp')return load(t.files[0]);
  if(f==='logo'||f==='bgimg')resize(t.files[0],f==='logo'?240:1400,u=>{b.s[f]=u;touch(b);pv()});
  else if(f.startsWith('av:'))resize(t.files[0],96,u=>{b.rows.find(r=>r.id===f.slice(3)).img=u;touch(b);pv()})});
@@ -324,7 +336,7 @@ async function signIn(){if(busy||!sb)return;const el=$('#pin'),m=$('#pm'),pin=el
   const j=await r.json().catch(()=>({}));if(r.status===429)throw new Error('Too many attempts. Please wait and try again.');if(!r.ok||!j.success||!j.token_hash)throw new Error('Incorrect PIN');
   const{error}=await sb.auth.verifyOtp({token_hash:j.token_hash,type:j.verification_type||'magiclink'});if(error)throw new Error('Sign-in failed. Please try again.')}
  catch(e){const m2=$('#pm');if(m2)m2.textContent=e.message||'Sign-in failed'}finally{busy=false}}
-function wipe(){exitp();unlink(1);clearTimeout(sT);clearTimeout(rT);clrAn();stopPoll();rtLive=false;rtFailed=false;setRT('');if(GCH&&sb){const c=GCH;GCH=null;sb.removeChannel(c)}S.boards=[];V.id=null;V.q='';V.cat='';V.imp=null;SES=false;ADM=false;BOOT=null;dirty=false;lastJ=''}
+function wipe(){exitp();unlink(1);clearTimeout(sT);clearTimeout(rT);clrAn();SEP++;stopPoll();rtLive=false;rtFailed=false;setRT('');if(GCH&&sb){const c=GCH;GCH=null;sb.removeChannel(c)}S.boards=[];V.id=null;V.q='';V.cat='';V.imp=null;SES=false;ADM=false;BOOT=null;dirty=false;lastJ=''}
 async function logout(msg){if(sb)try{await sb.auth.signOut()}catch(e){}wipe();AUTHR=true;render();if(msg)toast(msg)}
 function authChanged(ev,ses){if(!ses){if(SES||BOOT)wipe();AUTHR=true;render();return}if(BOOT===ses.user.id){if(ev==='TOKEN_REFRESHED'&&SES&&sb&&sb.realtime)Promise.resolve(sb.realtime.setAuth(ses.access_token)).catch(()=>{});return}boot(ses)}
 async function boot(ses){BOOT=ses.user.id;try{
@@ -332,8 +344,9 @@ async function boot(ses){BOOT=ses.user.id;try{
  if(a.data!==true&&v.data!==true){await logout('This account does not have access.');return}
  ADM=a.data===true;await loadAll();SES=true;V.id='global';V.v=ADM?'editor':'view';subscribe().catch(e=>{dbg('subscribe failed','',e);rtFail('ERROR',e)});AUTHR=true;render()}
  catch(e){await logout('Could not load leaderboard: '+(e.message||'error'))}}
-async function loadRows(){const all=[];for(let f=0;;f+=1000){const{data,error}=await sb.from('student_points').select('id,student_name,year_group,ht2,ht3,ht4,ht5,ht6,full_year').order('id').range(f,f+999);if(error)throw error;all.push(...data);if(data.length<1000)break}
- return all.map(r=>({id:String(r.id),name:String(r.student_name??''),score:+r.full_year||0,cat:r.year_group==null?'':'Year '+r.year_group,img:'',x:{HT2:r.ht2,HT3:r.ht3,HT4:r.ht4,HT5:r.ht5,HT6:r.ht6}}))}
+const COLS='id,student_name,year_group,ht2,ht3,ht4,ht5,ht6,full_year';
+const fromDB=r=>({id:String(r.id),name:String(r.student_name??''),score:+r.full_year||0,cat:r.year_group==null?'':'Year '+r.year_group,yg:r.year_group,img:'',x:{HT2:r.ht2,HT3:r.ht3,HT4:r.ht4,HT5:r.ht5,HT6:r.ht6}});
+async function loadRows(){const all=[];let total=null;for(;;){const{data,error,count}=await sb.from('student_points').select(COLS,{count:'exact'}).order('id').range(all.length,all.length+999);if(error)throw error;if(total===null)total=count==null?-1:count;all.push(...data);if(!data.length||(total>=0&&all.length>=total))break}return all.map(fromDB)}
 async function loadAll(){const[st,rows]=await Promise.all([sb.from('rankforge_settings').select('settings').eq('id','global').maybeSingle(),loadRows()]);if(st.error)throw st.error;
  const s=cleanS(st.data?.settings);if(!st.data)s.title='Leaderboard';lastJ=JSON.stringify(s);
  S.boards=[{id:'global',name:'Leaderboard',created:Date.now(),modified:Date.now(),fav:0,rows,_rj:JSON.stringify(rows),extra:['HT2','HT3','HT4','HT5','HT6'],s}]}
@@ -347,7 +360,7 @@ async function saveSet(){if(!ADM||!sb)return;clearTimeout(sT);const b=gb();if(!b
 async function recheck(){try{const{data}=await sb.rpc('rankforge_is_admin');if(data!==true&&ADM){ADM=false;V.v='view';render()}}catch(e){}}
 const scrub=s=>String(s??'').replace(/eyJ[\w-]{8,}\.[\w-]+\.[\w-]*/g,'[token]').replace(/sb_(publishable|secret)_[\w-]+/g,'[key]').replace(/Bearer\s+\S+/gi,'Bearer [redacted]');
 const dbg=(m,st,err)=>{try{console.warn('[RankForge] '+m,st??'',err?{name:err.name||'',message:scrub(err.message||err)}:'')}catch(e){}};
-let RT='',rtLive=false,rtFailed=false,PT=null,PIF=false,PFAIL=0,PEP=0;
+let SEP=0,RT='',rtLive=false,rtFailed=false,PT=null,PIF=false,PFAIL=0,PEP=0;
 const RTL={live:['Live updates connected','#22c55e'],poll:['Using automatic updates','#f59e0b'],recon:['Reconnecting\u2026','#f59e0b'],down:['Updates temporarily unavailable','#ef4444']};
 function setRT(s){if(RT===s)return;RT=s;let e=$('#rtchip');if(!s||!SES){RT=s||'';if(e)e.remove();return}
  if(!e){e=document.createElement('div');e.id='rtchip';document.body.appendChild(e)}e.textContent='';const d=document.createElement('i');d.style.background=RTL[s][1];e.appendChild(d);e.appendChild(document.createTextNode(RTL[s][0]))}
@@ -369,8 +382,38 @@ function applySettings(raw){const b=gb();if(!b||!raw)return;if(ADM&&(dirty||Date
  if(V.pres)presUpdate();else if(!ADM)vpaint(true);else render()}
 function applyRows(rows){const b=gb();if(!b||!rows)return;const j=JSON.stringify(rows);if(j===b._rj)return;
  if(ADM&&JSON.stringify(b.rows)!==b._rj)return;
- const n=b.rows.length;b.rows=rows;b._rj=j;
- if(V.pres)presUpdate();else if(!ADM)vpaint(true);else if(V.v==='editor'){n!==rows.length?render():pv(1)}}
+ const ids=b.rows.map(r=>r.id).join();b.rows=rows;b._rj=j;
+ if(V.pres)presUpdate();else if(!ADM)vpaint(true);else if(V.v==='editor'){if(ids!==rows.map(r=>r.id).join()){render()}else{pv(1);syncInputs(b)}}else if(V.v==='import')render()}
+async function refreshNow(){if(!sb||!SES)return;const ep=SEP,rows=await loadRows();if(ep!==SEP||!SES)return;applyRows(rows)}
+const ptab=b=>{const q=V.q.toLowerCase(),L=b.rows.filter(r=>(!q||r.name.toLowerCase().includes(q))&&(!V.cat||r.cat===V.cat));
+ return `<tr><th>Name</th><th>Yr</th>${HTN.map(k=>`<th>${k}</th>`).join('')}<th>Full</th><th></th></tr>`+L.slice(0,200).map(r=>`<tr><td style="white-space:nowrap">${esc(r.name)}</td><td>${r.yg??''}</td>${HTN.map(k=>`<td><input type="number" step="1" data-ht="${r.id}|${k}" value="${r.x[k]??0}" style="width:46px"></td>`).join('')}<td data-fy="${r.id}"><b>${r.score}</b></td><td><button class="btn s" data-a="delrow:${r.id}">\u00d7</button></td></tr>`).join('')+(L.length>200?`<tr><td colspan="9">Showing 200 of ${L.length}. Use search.</td></tr>`:'')};
+const ptabR=()=>{const e=$('#ptab'),b=gb();if(e&&b)e.innerHTML=ptab(b)};
+function syncInputs(b){const m=new Map(b.rows.map(r=>[r.id,r]));document.querySelectorAll('[data-ht]').forEach(i=>{if(document.activeElement===i)return;const[id,k]=i.dataset.ht.split('|'),r=m.get(id);if(r)i.value=r.x[k]??0});document.querySelectorAll('[data-fy]').forEach(c=>{const r=m.get(c.dataset.fy);if(r)c.innerHTML='<b>'+r.score+'</b>'})}
+async function htEdit(t){if(!ADM||!sb)return;const[id,k]=String(t.dataset.ht).split('|'),b=gb(),r=b&&b.rows.find(x=>x.id===id);if(!r)return;
+ const col=k.toLowerCase(),old=r.x[k],tv=String(t.value).trim(),v=tv===''?0:Number(tv);
+ if(!Number.isInteger(v)||Math.abs(v)>100000){t.value=old;return toast('Enter a whole number')}
+ if(v===old)return;t.disabled=true;
+ try{let q=sb.from('student_points').update({[col]:v}).eq('id',Number(id));q=old==null?q.is(col,null):q.eq(col,old);
+  const{data,error}=await q.select(COLS);if(error)throw error;
+  if(!data||data.length!==1){t.value=old;await refreshNow();return toast('Not saved: the value was changed elsewhere or you lack permission. Latest data reloaded.')}
+  const n=fromDB(data[0]),i=b.rows.indexOf(r);if(i>=0)b.rows[i]=n;b._rj=JSON.stringify(b.rows);t.value=n.x[k];
+  const c=document.querySelector('[data-fy="'+id+'"]');if(c)c.innerHTML='<b>'+n.score+'</b>';pv(1);toast('Saved')}
+ catch(e){t.value=old;toast('Could not save: '+emsg(e))}finally{t.disabled=false}}
+async function delRow(id){if(!ADM||!sb)return;const b=gb(),r=b&&b.rows.find(x=>x.id===id);if(!r)return;if(!confirm('Permanently delete '+r.name+' ('+r.cat+')?'))return;
+ try{const{data,error}=await sb.from('student_points').delete().eq('id',Number(id)).select('id');if(error)throw error;
+  if(!data||data.length!==1){await refreshNow();return toast('Not deleted: the record was already removed or you lack permission. Reloaded.')}
+  b.rows=b.rows.filter(x=>x.id!==id);b._rj=JSON.stringify(b.rows);render();toast('Deleted '+r.name)}
+ catch(e){toast('Could not delete: '+emsg(e))}}
+async function addRow(){if(!ADM||!sb)return;const nm=normName(($('#anm')||{}).value),yg=+(($('#ayg')||{}).value);if(!nm||!(yg>=7&&yg<=11))return toast('Enter a name and a year group (7\u201311)');
+ const b=gb();if(b.rows.some(r=>r.yg===yg&&r.name.toLowerCase()===nm.toLowerCase()))return toast('That student already exists in Year '+yg);
+ try{const{data,error}=await sb.from('student_points').insert({student_name:nm,year_group:yg,ht2:0,ht3:0,ht4:0,ht5:0,ht6:0}).select(COLS);if(error)throw error;
+  if(!data||data.length!==1)throw new Error('Supabase did not confirm the new record');b.rows.push(fromDB(data[0]));b._rj=JSON.stringify(b.rows);render();toast('Added '+nm)}
+ catch(e){toast('Could not add: '+emsg(e))}}
+async function bulkDb(kind){if(!ADM||!sb)return;const b=gb(),n=b?b.rows.length:0;if(!n)return toast('No students to change');
+ const w=kind==='zero'?'ZERO':'DELETE',a=prompt(`This permanently ${kind==='zero'?'sets HT2\u2013HT6 to 0 for':'deletes'} all ${n} students in Supabase.\nType ${w} to confirm.`);if(a!==w)return toast('Cancelled');
+ try{const q=sb.from('student_points'),{data,error}=kind==='zero'?await q.update({ht2:0,ht3:0,ht4:0,ht5:0,ht6:0}).gte('id',0).select('id'):await q.delete().gte('id',0).select('id');
+  if(error)throw error;await refreshNow();toast((kind==='zero'?'Zeroed ':'Deleted ')+(data?data.length:0)+' students')}
+ catch(e){try{await refreshNow()}catch(_){}toast('Failed: '+emsg(e))}}
 function startPoll(){if(PT||!SES||!sb)return;PT=setInterval(pollOnce,5000);pollOnce()}
 function stopPoll(){if(PT){clearInterval(PT);PT=null}PEP++;PIF=false}
 async function pollOnce(){if(PIF||!SES||!sb||document.hidden)return;PIF=true;const ep=PEP;
@@ -384,7 +427,7 @@ async function pollOnce(){if(PIF||!SES||!sb||document.hidden)return;PIF=true;con
   sb.auth.getSession().then(x=>{if(!x.data.session&&SES)authChanged('SIGNED_OUT',null)}).catch(()=>{})}
  finally{if(ep===PEP)PIF=false}}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&PT)pollOnce()});
-function rowsSoon(){clearTimeout(rT);rT=setTimeout(async()=>{try{if(!SES)return;const ep=PEP,rows=await loadRows();if(ep!==PEP||!SES)return;applyRows(rows)}catch(e){}},400)}
+function rowsSoon(){clearTimeout(rT);rT=setTimeout(async()=>{try{if(!SES)return;const ep=SEP,rows=await loadRows();if(ep!==SEP||!SES)return;applyRows(rows)}catch(e){}},400)}
 function initAuth(){if(!keyOK()){AUTHR=true;render();return}
  sb=supabase.createClient(SB_URL,SB_KEY,{auth:{storage:window.sessionStorage,persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}});
  sb.auth.onAuthStateChange((ev,ses)=>setTimeout(()=>authChanged(ev,ses),0))}
