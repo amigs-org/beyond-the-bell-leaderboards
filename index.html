@@ -19,6 +19,7 @@ main{flex:1;min-width:0;padding:28px 32px}
 h2{margin:0 0 4px;font-size:24px;letter-spacing:-.02em}.sb{color:var(--m);margin:0 0 22px}
 .btn{display:inline-flex;gap:6px;align-items:center;padding:7px 12px;border-radius:8px;border:1px solid var(--l);background:var(--c);color:var(--t);font:inherit;cursor:pointer;transition:.15s}
 .btn:hover{border-color:var(--a)}.btn.p{background:var(--a);border-color:var(--a);color:#fff}.btn.s{padding:4px 8px;font-size:12px}
+.btn:disabled{opacity:.45;cursor:not-allowed}.btn:disabled:hover{border-color:var(--l)}.btn.p:disabled:hover{border-color:var(--a)}
 .card{background:var(--c);border:1px solid var(--l);border-radius:12px;padding:16px;box-shadow:0 1px 2px #0000000a}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px}
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:24px}.stats b{font-size:28px;display:block;letter-spacing:-.02em}.stats span{color:var(--m)}
@@ -122,27 +123,49 @@ function seed(){if(S.seeded||S.boards.length)return;S.seeded=1;const n=['Amara O
 const HTN=['HT2','HT3','HT4','HT5','HT6'];
 const normName=s=>String(s??'').normalize('NFC').replace(/[\u200B-\u200D\uFEFF]/g,'').replace(/\u00A0/g,' ').replace(/\s+/g,' ').trim();
 const emsg=e=>{const c=e&&e.code;return c==='42501'?'permission denied (administrator only)':c==='23505'?'that student already exists':scrub(e&&e.message||e||'unknown error')};
-function sheetTpl(){const wb=XLSX.utils.book_new();[7,8,9,10,11].forEach(y=>{XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['Name','HT2','HT3','HT4','HT5','HT6','FULL YEAR'],['Alex Smith',10,12,8,15,9],['Priya Shah',14,11,13,10,12]]),'Year '+y)});XLSX.writeFile(wb,'rankforge-template.xlsx')}
-function sheetYear(n){const m=String(n).match(/(?:^|[^0-9])(7|8|9|10|11)(?![0-9])/);return m?+m[1]:null}
-function findHeader(a){for(let i=0;i<Math.min(a.length,15);i++){const hd=(a[i]||[]).map(c=>String(c??'').trim()),ni=hd.findIndex(c=>/^(student(\s*name)?|pupil(\s*name)?|name|full\s*name)$/i.test(c)),ci={};
+function sheetTpl(){const wb=XLSX.utils.book_new();[7,8,9,10,11].forEach(y=>{XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['Name','HT2','HT3','HT4','HT5','HT6','FULL YEAR'],['Alex Smith',10,12,8,15,9],['Priya Shah',14,11,13,10,12]]),'Year '+y)});
+ XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['Name','Year','HT2','HT3','HT4','HT5','HT6'],['Sam Taylor',7,5,6,7,8,9],['Jo Bennett',10,9,8,7,6,5]]),'FULL SCHOOL');XLSX.writeFile(wb,'rankforge-template.xlsx')}
+function sheetYear(n){const re=/(?:^|[^0-9])(7|8|9|10|11)(?![0-9])/g,y=new Set();let m;while((m=re.exec(String(n))))y.add(+m[1]);return y.size===1?[...y][0]:null}
+// A year value is read only when it is explicit: 7-11, "Year 8", "Yr 9", "Y10". Anything else (e.g. a form code) is never guessed.
+const YRX=/^(?:(?:year|yr|y)\.?\s*)?(7|8|9|10|11)$/i,YLB=/^(?:year|yr|y)\.?\s*(7|8|9|10|11)$/i,
+ yval=(v,strict)=>{const m=String(v??'').trim().replace(/\.0+$/,'').match(strict?YLB:YRX);return m?+m[1]:null},
+ FSRX=/full\s*school|whole\s*school|all\s*(years|school|students)/i,NMRX=/^(student(\s*name)?|pupil(\s*name)?|name|full\s*name)$/i;
+function findHeader(a){for(let i=0;i<Math.min(a.length,15);i++){const hd=(a[i]||[]).map(c=>String(c??'').trim()),ni=hd.findIndex(c=>NMRX.test(c)),yi=hd.findIndex(c=>/^(year(\s*group)?|yr(\s*group)?|y\.?g\.?|year\s*no\.?|grade)$/i.test(c)),ci={};
   hd.forEach((c,k)=>{const m=c.match(/^(?:h\.?\s*t\.?\s*|half\s*term\s*)([2-6])$/i);if(m)ci['HT'+m[1]]=k});
-  if(ni>=0&&Object.keys(ci).length)return{row:i,ni,ci}}return null}
-function defSel(wb){return new Set(wb.SheetNames.filter(n=>sheetYear(n)))}
+  if(ni>=0&&Object.keys(ci).length)return{row:i,ni,ci,yi}}return null}
+function defSel(wb){const y=wb.SheetNames.filter(n=>sheetYear(n));return new Set(y.length?y:wb.SheetNames.filter(n=>FSRX.test(n)))}
 function planImport(wb,sel){sel=sel||defSel(wb);const b=gb(),ex={};(b?b.rows:[]).forEach(r=>{ex[r.yg+'|'+r.name.toLowerCase()]=r});
- const P={sheets:[],items:[],invalid:0,dups:0,skipped:0,issues:[]},seen={};
- wb.SheetNames.forEach(sn=>{const T={name:sn,yg:sheetYear(sn),rows:0,n:0,u:0,same:0,bad:0,note:'',off:!sel.has(sn)};P.sheets.push(T);if(T.off)return;
-  if(!T.yg){T.note='Skipped: no year group (7\u201311) in the sheet name';P.skipped++;return}
+ const P={sheets:[],items:[],invalid:0,dups:0,rep:0,skipped:0,issues:[]},seen={},yrs=new Set(),cnt=t=>t.st==='new'?'n':t.st==='update'?'u':'same';
+ wb.SheetNames.forEach(sn=>{const T={name:sn,yg:sheetYear(sn),ys:[],rows:0,n:0,u:0,same:0,bad:0,rep:0,note:'',off:!sel.has(sn)};P.sheets.push(T);if(T.off)return;
   const a=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:'',blankrows:false}),H=findHeader(a);
   if(!H){T.note='Skipped: no Name column with HT headers';P.skipped++;return}
   const miss=HTN.filter(k=>H.ci[k]===undefined);if(miss.length){T.note='Skipped: missing column '+miss.join(', ');P.skipped++;return}
-  for(let i=H.row+1;i<a.length;i++){const r=a[i],name=normName(r[H.ni]);if(!name)continue;T.rows++;
+  const cell=(r,k)=>String(r[H.ci[k]]??'').trim(),ys=new Set(),un=[];let sec=null;
+  for(let i=H.row+1;i<a.length;i++){const r=a[i],name=normName(r[H.ni]);if(!name)continue;
+   if(NMRX.test(name)&&HTN.some(k=>/^h/i.test(cell(r,k))))continue;
+   if(!T.yg){const lab=yval(name,true);if(lab&&HTN.every(k=>cell(r,k)==='')&&(H.yi<0||String(r[H.yi]??'').trim()==='')){sec=lab;continue}}
+   T.rows++;
+   let yg=T.yg,why='';
+   if(H.yi>=0){const raw=String(r[H.yi]??'').trim();if(raw!==''){const v=yval(raw);if(v==null)why=`year "${raw.slice(0,12)}" is not 7\u201311`;else if(T.yg&&v!==T.yg)why=`year ${v} does not match the sheet's year ${T.yg}`;else yg=v}}
+   if(!why&&!yg&&sec)yg=sec;
+   if(why){T.bad++;P.invalid++;P.issues.push(`${sn} row ${i+1} (${name}): ${why}`);continue}
+   if(!yg){un.push({i,name});continue}
+   ys.add(yg);yrs.add(yg);
    const ht={};let bad='';for(const k of HTN){const raw=r[H.ci[k]],t=String(raw??'').trim(),v=t===''?0:Number(t.replace(/,/g,''));if(!Number.isInteger(v)||Math.abs(v)>100000){bad=`${k} "${String(raw).slice(0,20)}" is not a whole number`;break}ht[k.toLowerCase()]=v}
    if(bad){T.bad++;P.invalid++;P.issues.push(`${sn} row ${i+1} (${name}): ${bad}`);continue}
-   const key=T.yg+'|'+name.toLowerCase();if(seen[key]){P.dups++;T.bad++;P.issues.push(`${sn} row ${i+1}: duplicate "${name}" (first entry kept)`);continue}
-   const old=ex[key],it={name:old?old.name:name,yg:T.yg,ht,old};seen[key]=1;
+   const key=yg+'|'+name.toLowerCase(),prev=seen[key];
+   if(prev){if(HTN.every(k=>prev.ht[k.toLowerCase()]===ht[k.toLowerCase()])){P.rep++;T.rep++;continue}
+    // same student and year with different scores: never guess which is right, import neither
+    if(prev.it){P.items.splice(P.items.indexOf(prev.it),1);prev.T[cnt(prev.it)]--;prev.T.bad++;P.invalid++;P.dups++;prev.it=null;
+     P.issues.push(`Conflict: "${name}" (Year ${yg}) has different scores in ${prev.sn} row ${prev.row} and ${sn} row ${i+1}. Neither was imported. Deselect one worksheet or correct the data.`)}
+    T.bad++;P.invalid++;continue}
+   const old=ex[key],it={name:old?old.name:name,yg,ht,old};seen[key]={ht,it,T,sn,row:i+1};
    if(!old){T.n++;it.st='new'}else if(HTN.some(k=>old.x[k]!==ht[k.toLowerCase()])){T.u++;it.st='update'}else{T.same++;it.st='same'}
-   P.items.push(it)}});
- P.seenKeys=seen;P.years=[...new Set(P.sheets.filter(s=>s.yg&&!s.note&&!s.off).map(s=>s.yg))];return P}
+   P.items.push(it)}
+  T.ys=[...ys].sort((x,y)=>x-y);
+  if(!T.yg&&!T.ys.length&&T.rows>0){T.note='Skipped: no year group could be read. Nothing was guessed. Add a "Year" column (7\u201311) beside Name, or put a "Year 7" style heading row above each group, or name the sheet "Year 7" to "Year 11"';P.skipped++}
+  else un.forEach(u=>{T.bad++;P.invalid++;P.issues.push(`${sn} row ${u.row||u.i+1} (${u.name}): no year group for this student (not imported)`)})});
+ P.seenKeys=seen;P.years=[...yrs].sort((x,y)=>x-y);return P}
 async function savePlan(P,o={}){if(!ADM||!sb)return{ok:false,saved:0,msg:'Administrator access required'};
  const work=P.items.filter(i=>i.st!=='same');let saved=0,nw=0,up=0,removed=0;
  try{for(let i=0;i<work.length;i+=500){const ch=work.slice(i,i+500),pay=ch.map(x=>({student_name:x.name,year_group:x.yg,...x.ht}));
@@ -157,24 +180,26 @@ async function savePlan(P,o={}){if(!ADM||!sb)return{ok:false,saved:0,msg:'Admini
 function load(f){if(!ADM)return;const fr=new FileReader();fr.onload=e=>{try{const wb=XLSX.read(e.target.result,{type:'array'});V.imp={file:f.name,wb,sel:defSel(wb),rm:false,ok:false,busy:false,res:null};V.imp.plan=planImport(wb,V.imp.sel);render()}catch(x){toast('Could not read file: '+emsg(x))}};fr.onerror=()=>toast('File read failed');fr.readAsArrayBuffer(f)}
 function toggleSheet(i,on){const I=V.imp;if(!I)return;const n=I.wb.SheetNames[i];if(n===undefined)return;I.sel=I.sel||defSel(I.wb);if(on)I.sel.add(n);else I.sel.delete(n);I.rm=false;I.ok=false;I.res=null;I.plan=planImport(I.wb,I.sel);render()}
 function setAllSheets(on){const I=V.imp;if(!I)return;I.sel=on?new Set(I.wb.SheetNames):new Set();I.rm=false;I.ok=false;I.res=null;I.plan=planImport(I.wb,I.sel);render()}
-async function saveImport(){const I=V.imp;if(!I||I.busy||!ADM)return;I.busy=true;I.res=null;render();
- try{await refreshNow()}catch(e){}I.plan=planImport(I.wb,I.sel);const P=I.plan,rm=I.rm&&I.ok&&P.invalid===0&&P.skipped===0;
- const r=await savePlan(P,{rm});I.busy=false;I.res=r;
- if(r.ok){S.imps.unshift({file:I.file,sheet:'all years',n:r.saved,date:Date.now(),board:'Leaderboard'});S.imps=S.imps.slice(0,20);save();I.plan=planImport(I.wb,I.sel);I.rm=false;I.ok=false}
- render();toast(r.ok?`Saved ${r.saved} student${r.saved===1?'':'s'} to Supabase`:'Import not fully saved: '+r.msg)}
+async function saveImport(){const I=V.imp;if(!I||I.busy||!ADM)return;I.busy=true;I.res=null;render();let r;
+ try{try{await refreshNow()}catch(e){}I.plan=planImport(I.wb,I.sel);const P=I.plan,rm=I.rm&&I.ok&&P.invalid===0&&P.skipped===0;
+  r=!P.items.some(i=>i.st!=='same')&&!rm?{ok:true,saved:0,nw:0,up:0,removed:0,noop:true}:await savePlan(P,{rm})}
+ catch(e){r={ok:false,saved:0,nw:0,up:0,removed:0,msg:emsg(e)}}finally{I.busy=false}
+ I.res=r;
+ if(r.ok&&!r.noop){S.imps.unshift({file:I.file,sheet:'all years',n:r.saved,date:Date.now(),board:'Leaderboard'});S.imps=S.imps.slice(0,20);save();try{I.plan=planImport(I.wb,I.sel)}catch(e){}I.rm=false;I.ok=false}
+ render();toast(r.noop?'Nothing to save: every selected student already matches Supabase':r.ok?`Saved ${r.saved} student${r.saved===1?'':'s'} to Supabase`:'Import not fully saved: '+r.msg)}
 const nav=[['dash','home','Dashboard'],['boards','list','My Leaderboards'],['import','plus','Create Leaderboard'],['themes','pal','Themes'],['imports','up','Imports'],['set','set','Settings']];
 const side=()=>`<nav class="side"><div class="logo"><i>🏆</i>RankForge</div>${nav.map(n=>`<button class="nav ${V.v===n[0]||(V.v==='editor'&&n[0]==='boards')?'on':''}" data-a="nav:${n[0]}">${ic(n[1])}${n[2]}</button>`).join('')}<button class="nav" style="margin-top:auto" data-a="logout">Sign out</button></nav>`;
 const th=b=>`<div class="th"><div>${lbH(b,false)}</div></div>`;
-const bcard=b=>`<div class="card">${th(b)}<div class="row"><b class="sp">${esc(b.name)}</b><button class="btn s" data-a="fav:${b.id}" title="Favourite" style="${b.fav?'color:#f5b301':''}">${ic('star')}</button></div><div style="color:var(--m);font-size:12px;margin:4px 0 10px">${b.rows.length} participants · Created ${dt(b.created)} · Edited ${dt(b.modified)}</div><div class="row"><button class="btn s p" data-a="open:${b.id}">Edit</button><button class="btn s" data-a="dup:${b.id}">${ic('copy')}Duplicate</button><button class="btn s" data-a="del:${b.id}">${ic('del')}</button></div></div>`;
+const bcard=b=>`<div class="card">${th(b)}<div class="row"><b class="sp">${esc(b.id==='global'?(b.s.title||b.name):b.name)}</b><button class="btn s" data-a="fav:${b.id}" title="Favourite" style="${b.fav?'color:#f5b301':''}">${ic('star')}</button></div><div style="color:var(--m);font-size:12px;margin:4px 0 10px">${b.rows.length} participants · ${b.id==='global'?'Shared leaderboard, stored in Supabase':`Created ${dt(b.created)} · Edited ${dt(b.modified)}`}</div><div class="row"><button class="btn s p" data-a="open:${b.id}">Edit</button><button class="btn s" data-a="dup:${b.id}">${ic('copy')}Duplicate</button>${b.id==='global'&&!b.hasDesign?'':`<button class="btn s" data-a="del:${b.id}" title="${b.id==='global'?'Delete the shared design (students are kept)':'Delete'}">${ic('del')}</button>`}</div></div>`;
 const empty=(t,a)=>`<div class="empty"><p>${t}</p>${a||''}</div>`;
-function main(){const B=S.boards.filter(b=>b.id!=='global'||b.hasDesign);
+function main(){const B=S.boards.filter(b=>b.id!=='global'||b.hasDesign||b.rows.length);
  if(V.v==='dash'){const rc=[...B].sort((a,c)=>c.modified-a.modified),fv=B.filter(b=>b.fav);
   return `<div class="row"><div class="sp"><h2>Dashboard</h2><p class="sb">Everything you’ve built, in one place.</p></div><button class="btn p" data-a="nav:import">${ic('plus')}Quick create</button></div>
   <div class="stats"><div class="card"><b>${B.length}</b><span>Leaderboards</span></div><div class="card"><b>${S.boards.reduce((n,b)=>n+b.rows.length,0)}</b><span>Participants</span></div><div class="card"><b>${S.themes.length}</b><span>Saved themes</span></div><div class="card"><b>${S.imps.length}</b><span>Imports</span></div></div>
   <h3>Recently edited</h3>${B.length?`<div class="grid">${rc.slice(0,6).map(bcard).join('')}</div>`:empty('No leaderboards yet.',`<button class="btn p" data-a="nav:import">Import a spreadsheet</button>`)}
   <h3>Favourites</h3>${fv.length?`<div class="grid">${fv.map(bcard).join('')}</div>`:empty('Star a leaderboard to pin it here.')}
   <h3>Recent imports</h3>${impList()}`}
- if(V.v==='boards')return `<h2>My Leaderboards</h2><p class="sb">${B.length} saved locally in this browser.</p>${B.length?`<div class="grid">${B.map(bcard).join('')}</div>`:empty('Nothing here yet.')}`;
+ if(V.v==='boards')return `<h2>My Leaderboards</h2><p class="sb">${B.length} leaderboard${B.length===1?'':'s'}. The shared leaderboard, its scores and its design are stored in Supabase.</p>${B.length?`<div class="grid">${B.map(bcard).join('')}</div>`:empty('Nothing here yet.')}`;
  if(V.v==='import')return impV();
  if(V.v==='imports')return `<h2>Imports</h2><p class="sb">History of spreadsheets you’ve imported.</p>${impList()}`;
  if(V.v==='themes')return `<h2>Themes</h2><p class="sb">Built-in presets and your saved themes. Apply them inside the editor.</p><h3>Saved themes</h3>${S.themes.length?`<div class="grid">${S.themes.map((t,i)=>`<div class="card"><div style="height:46px;border-radius:8px;background:linear-gradient(135deg,${t.s.bg},${t.s.bg2});border:1px solid var(--l)"></div><div class="row" style="margin-top:8px"><b class="sp">${esc(t.name)}</b><button class="btn s" data-a="delth:${i}">${ic('del')}</button></div></div>`).join('')}</div>`:empty('Open a leaderboard, tune the design, and click “Save theme”.')}<h3>Built-in <small style="color:var(--m);font-weight:400">(protected, can’t be deleted)</small></h3><div class="grid">${Object.keys(PRE).map(n=>{const p=PRE[n];return `<div class="card"><div style="height:46px;border-radius:8px;background:linear-gradient(135deg,${p[0]},${p[1]});border:1px solid var(--l);display:flex;gap:6px;padding:12px"><i style="width:22px;height:22px;border-radius:50%;background:${p[3]}"></i><i style="width:22px;height:22px;border-radius:50%;background:${p[4]}"></i></div><b style="text-transform:capitalize;display:block;margin-top:8px">${n}</b></div>`}).join('')}</div>`;
@@ -182,16 +207,17 @@ function main(){const B=S.boards.filter(b=>b.id!=='global'||b.hasDesign);
  if(V.v==='editor'&&cur())return editor(cur());V.v='dash';return main()}
 const impList=()=>S.imps.length?`<div class="card"><table>${S.imps.slice(0,10).map(i=>`<tr><td>${esc(i.file)} <span style="color:var(--m)">(${esc(i.sheet)})</span></td><td>${i.n} rows</td><td>→ ${esc(i.board)}</td><td>${dt(i.date)}</td></tr>`).join('')}</table></div>`:empty('No imports yet.');
 function impV(){const I=V.imp;
- if(!I)return `<h2>Import workbook</h2><p class="sb">Upload the Excel workbook with one sheet per year group (Year 7 to Year 11). Each sheet needs a Name column and HT2\u2013HT6 columns. FULL YEAR is calculated by the database and is never uploaded.</p><label class="drop" id="drop" style="display:block"><div style="font-size:34px">\ud83d\udcc4</div><b>Drop a .xlsx or .xls workbook here</b><div style="color:var(--m)">or click to browse</div><input type="file" accept=".xlsx,.xls" data-f="imp" hidden></label><p><button class="btn" data-a="tpl">${ic('dl')}Download example workbook</button></p>`;
- const P=I.plan,b=gb(),work=P.items.filter(i=>i.st!=='same').length,canRm=P.invalid===0&&P.skipped===0&&P.years.length>0,R=I.res,
+ if(!I)return `<h2>Import workbook</h2><p class="sb">Upload the Excel workbook. Either use one sheet per year group (name them Year 7 to Year 11), or a FULL SCHOOL sheet with a Year column (7\u201311) beside Name. Each sheet needs a Name column and HT2\u2013HT6 columns. FULL YEAR is calculated by the database and is never uploaded.</p><label class="drop" id="drop" style="display:block"><div style="font-size:34px">\ud83d\udcc4</div><b>Drop a .xlsx or .xls workbook here</b><div style="color:var(--m)">or click to browse</div><input type="file" accept=".xlsx,.xls" data-f="imp" hidden></label><p><button class="btn" data-a="tpl">${ic('dl')}Download example workbook</button></p>`;
+ const P=I.plan,b=gb(),work=P.items.filter(i=>i.st!=='same').length,nothing=!work&&!(I.rm&&I.ok&&(P.invalid===0&&P.skipped===0&&P.years.length>0&&b?b.rows.filter(r=>P.years.includes(r.yg)&&!P.seenKeys[r.yg+'|'+r.name.toLowerCase()]).length:0)),
+  why=nothing&&!I.busy?(P.items.length?'Nothing to save: every selected student already matches Supabase.':P.sheets.some(s=>!s.off)?'Save is unavailable: no valid student rows were found in the selected worksheets. See the Problems column for what is missing.':'Save is unavailable: tick at least one worksheet.'):'',canRm=P.invalid===0&&P.skipped===0&&P.years.length>0,R=I.res,
   rmN=canRm&&b?b.rows.filter(r=>P.years.includes(r.yg)&&!P.seenKeys[r.yg+'|'+r.name.toLowerCase()]).length:0;
  return `<h2>Import: ${esc(I.file)}</h2><p class="sb">Review the sheets, then save. Nothing is written to Supabase until you click Save.</p>
- <div class="card" style="overflow:auto"><div class="row" style="margin-bottom:8px"><b class="sp">Worksheets to import</b><button class="btn s" data-a="shall">Select all</button><button class="btn s" data-a="shnone">Deselect all</button></div><table><tr><th></th><th>Worksheet</th><th>Year</th><th>Rows</th><th>New</th><th>Updated</th><th>Unchanged</th><th>Problems</th></tr>${P.sheets.map((s,i)=>`<tr${s.off?' style="opacity:.55"':''}><td><input type="checkbox" data-sh="${i}" ${s.off?'':'checked'}></td><td>${esc(s.name)}</td><td>${s.yg??'\u2013'}</td><td>${s.rows}</td><td>${s.n}</td><td>${s.u}</td><td>${s.same}</td><td>${s.off?'Not selected':s.note?`<span class="iss">${esc(s.note)}</span>`:s.bad}</td></tr>`).join('')}</table></div>
+ <div class="card" style="overflow:auto"><div class="row" style="margin-bottom:8px"><b class="sp">Worksheets to import</b><button class="btn s" data-a="shall">Select all</button><button class="btn s" data-a="shnone">Deselect all</button></div><table><tr><th></th><th>Worksheet</th><th>Year</th><th>Rows</th><th>New</th><th>Updated</th><th>Unchanged</th><th>Problems</th></tr>${P.sheets.map((s,i)=>`<tr${s.off?' style="opacity:.55"':''}><td><input type="checkbox" data-sh="${i}" ${s.off?'':'checked'}></td><td>${esc(s.name)}</td><td>${s.yg??(s.ys&&s.ys.length?s.ys.join(', '):'\u2013')}</td><td>${s.rows}</td><td>${s.n}</td><td>${s.u}</td><td>${s.same}</td><td>${s.off?'Not selected':s.note?`<span class="iss">${esc(s.note)}</span>`:s.bad+(s.rep?` \u00b7 ${s.rep} repeated`:'')}</td></tr>`).join('')}</table></div>
  ${P.issues.length?`<div class="iss">${P.issues.slice(0,8).map(x=>esc(x)).join('<br>')}${P.issues.length>8?`<br>\u2026and ${P.issues.length-8} more`:''}</div>`:''}
- <p><b>${work}</b> student${work===1?'':'s'} will be written (new or changed) from ${P.sheets.filter(s=>!s.off).length} of ${P.sheets.length} worksheets. Year groups you did not select are never touched. Students missing from the workbook are <b>not</b> deleted unless you choose below.</p>
+ <p><b>${work}</b> student${work===1?'':'s'} will be written (new or changed) from ${P.sheets.filter(s=>!s.off).length} of ${P.sheets.length} worksheets. Year groups you did not select are never touched.${P.rep?` ${P.rep} repeated entr${P.rep===1?'y':'ies'} (same student, year and scores) will be written once.`:''} Students missing from the workbook are <b>not</b> deleted unless you choose below.</p>
  ${rmN?`<label style="display:block"><input type="checkbox" data-i="rm" ${I.rm?'checked':''}> Also remove ${rmN} student${rmN===1?'':'s'} in Year ${P.years.join(', ')} who are not in this workbook</label>${I.rm?`<label style="display:block;color:#dc2626"><input type="checkbox" data-i="ok" ${I.ok?'checked':''}> I understand these ${rmN} records will be permanently deleted</label>`:''}`:''}
- ${R?`<div class="card" style="margin:10px 0;border-color:${R.ok?'#16a34a':'#dc2626'}">${R.ok?`Saved to Supabase: ${R.nw} new, ${R.up} updated${R.removed?`, ${R.removed} removed`:''}.`:`Not fully saved: ${esc(R.msg)}${R.saved?` (${R.saved} students were saved before the error)`:''}`}</div>`:''}
- <div class="row"><button class="btn p" data-a="commit" ${I.busy||(!work&&!(I.rm&&I.ok&&rmN))?'disabled':''}>${I.busy?'Saving\u2026':'Save to Supabase'}</button><button class="btn" data-a="cancelimp">${R&&R.ok?'Done':'Cancel'}</button></div>`}
+ ${R?`<div class="card" style="margin:10px 0;border-color:${R.ok?'#16a34a':'#dc2626'}">${R.ok?(R.noop?'Nothing to save: every selected student already matches Supabase.':`Saved to Supabase: ${R.nw} new, ${R.up} updated${R.removed?`, ${R.removed} removed`:''}.`):`Not fully saved: ${esc(R.msg)}${R.saved?` (${R.saved} students were saved before the error)`:''}`}</div>`:''}
+ <div class="row"><button class="btn p" data-a="commit" ${I.busy||(!work&&!(I.rm&&I.ok&&rmN))?'disabled':''}${why?` title="${esc(why)}"`:''}>${I.busy?'Saving\u2026':'Save to Supabase'}</button><button class="btn" data-a="cancelimp">${R&&R.ok?'Done':'Cancel'}</button></div>${why?`<p class="iss" id="nosave">${why}</p>`:''}`}
 const col=(k,l,s)=>`<label>${l}<input type="color" data-k="${k}" value="${s[k]}"></label>`,rg=(k,l,a,z,s,st=1)=>`<label>${l}<input type="range" data-k="${k}" min="${a}" max="${z}" step="${st}" value="${s[k]}"></label>`,tx=(k,l,s)=>`<label>${l}<input data-k="${k}" value="${esc(s[k])}"></label>`,sel=(k,l,o,s)=>`<label>${l}<select data-k="${k}">${o.map(x=>`<option value="${x[0]}" ${String(s[k])===x[0]?'selected':''}>${x[1]}</option>`).join('')}</select></label>`;
 function editor(b){const s=b.s;return `<div class="eh"><input class="tt" data-n="1" value="${esc(b.name)}"><span class="sp"></span>${b.id==='global'?`<span id="sv" style="font-size:12px;color:var(--m)">Design synced</span><button class="btn" data-a="savenow">Save design</button>`:''}<button class="btn" data-a="pres">${ic('play')}Present</button><button class="btn" data-a="nav:boards">Done</button></div>
  <div class="ed"><aside class="pn"><details open><summary>Theme</summary>${sel('theme','Preset',Object.keys(PRE).map(n=>[n,n[0].toUpperCase()+n.slice(1)]),s)}<label>Saved<select data-st="1"><option value="">— choose —</option>${S.themes.map((t,i)=>`<option value="${i}">${esc(t.name)}</option>`).join('')}</select></label><button class="btn s" data-a="savetheme">Save current as theme</button></details>
@@ -266,7 +292,7 @@ function bump(e,a,b){const sc=e.querySelector('.sc');if(!sc)return;e.style.posit
 function banner(t){document.querySelectorAll('.lvb').forEach(x=>x.remove());const d=document.createElement('div');d.className='lvb';d.textContent=t;document.body.appendChild(d);
  d.animate([{opacity:0,transform:'translate(-50%,-20px)'},{opacity:1,transform:'translate(-50%,0)',offset:.1},{opacity:1,transform:'translate(-50%,0)',offset:.85},{opacity:0,transform:'translate(-50%,-10px)'}],{duration:4000}).onfinish=()=>d.remove()}
 let pt;function pres(){let e=$('#pres');if(!e){e=document.createElement('div');e.id='pres';document.body.appendChild(e)}const b=cur();
- e.innerHTML=`<div class="pb">${V.lk?'<span class="btn s">● Live file</span>':''}<label class="btn s"><input type="checkbox" id="auto" ${V.auto?'checked':''}>Auto-refresh</label><button class="btn s" data-a="exitp">Exit (Esc)</button></div>${lbH(b,false,1.5)}`;e.style.background=b.s.bg;runAn(e);clearInterval(pt);if(V.auto)pt=setInterval(()=>{try{const x=JSON.parse(localStorage.getItem('rf1'));if(x){S=x;pres()}}catch(e){}},10000)}
+ e.innerHTML=`<div class="pb">${V.lk?'<span class="btn s">● Live file</span>':''}<label class="btn s"><input type="checkbox" id="auto" ${V.auto?'checked':''}>Auto-refresh</label><button class="btn s" data-a="exitp">Exit (Esc)</button></div>${lbH(b,false,1.5)}`;e.style.background=b.s.bg;runAn(e);clearInterval(pt);if(V.auto)pt=setInterval(()=>{pollOnce().catch(()=>{})},10000)}
 function exitp(){V.pres=false;clearInterval(pt);$('#pres')?.remove();clrAn();if(V.v==='editor')pv();else if(V.v==='view')vpaint();if(document.fullscreenElement)document.exitFullscreen()}
 // ---------- events
 function render(){clrAn();document.documentElement.toggleAttribute('data-d',S.dark);
@@ -279,7 +305,7 @@ const touch=b=>{b.modified=Date.now();save();if(b.id==='global')queueSet()};
 document.addEventListener('click',e=>{const t=e.target.closest('[data-a]');if(!t)return;const[a,g]=t.dataset.a.split(':'),b=cur();if(!ADM&&!['pres','exitp','logout','signin'].includes(a))return;
  if(a==='nav'){V.v=g;V.imp=null;render()}else if(a==='open'){V.id=g;V.v='editor';V.q='';V.cat='';render()}
  else if(a==='fav'){const x=S.boards.find(b=>b.id===g);x.fav=x.fav?0:1;save();render()}
- else if(a==='dup'){const x=S.boards.find(b=>b.id===g),c=JSON.parse(JSON.stringify(x));c.id=uid();delete c.pub;c.name+=' (copy)';c.created=c.modified=Date.now();S.boards.unshift(c);save();render();toast('Duplicated')}
+ else if(a==='dup'){const x=S.boards.find(b=>b.id===g),c=JSON.parse(JSON.stringify(x));c.id=uid();delete c.pub;c.name+=' (copy)';c.created=c.modified=Date.now();S.boards.unshift(c);save();render();toast('Duplicated for this session only (not saved to Supabase)')}
  else if(a==='del'){const x=S.boards.find(b=>b.id===g);if(g==='global')return delShared();S.boards=S.boards.filter(b=>b.id!==g);save();render()}
  else if(a==='delth'){S.themes.splice(+g,1);save();render()}else if(a==='tpl')sheetTpl();
  else if(a==='wipe'){S.themes=[];S.imps=[];save();render()}
