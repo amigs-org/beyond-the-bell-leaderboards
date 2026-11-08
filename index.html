@@ -90,8 +90,9 @@ let st;const save=()=>{clearTimeout(st);st=setTimeout(()=>{try{localStorage.setI
 const PRE={minimalist:['#ffffff','#ffffff','#111111','#111111','#2563eb','#f5f5f5','#e5e5e5','sans',10],'modern dark':['#0b0d12','#12162a','#eef0ff','#8b7bff','#22d3ee','#161a28','#252b3d','sans',14],'premium gold':['#14110a','#241c0c','#f5e6c0','#d4af37','#f0c75e','#1e1a10','#3a3118','serif',6],neon:['#05050f','#150a33','#ffffff','#ff2bd6','#00f0ff','#0d0d24','#3a1a8c','mono',4],academic:['#f7f3e8','#efe7d2','#2b2a33','#7b1e2b','#1e4d8c','#fffdf6','#d8cfb8','serif',4],sport:['#0a3d1f','#0f5a2c','#ffffff','#ffd400','#ff6a00','#0f5228','#1b7a3f','bold',8],corporate:['#f1f5f9','#e2e8f0','#0f172a','#1d4ed8','#0891b2','#ffffff','#cbd5e1','sans',8],glassmorphism:['#4f46e5','#ec4899','#ffffff','#ffffff','#fde68a','#ffffff','#ffffff','round',18],gradient:['#ff7e5f','#6a11cb','#ffffff','#ffffff','#ffe66d','#ffffff','#ffffff','sans',16],editorial:['#fbfaf7','#fbfaf7','#111111','#e11d48','#111111','#ffffff','#111111','serif',0]};
 const FONTS={sans:'Inter,system-ui,-apple-system,Segoe UI,sans-serif',serif:'Georgia,Times New Roman,serif',mono:'ui-monospace,Menlo,Consolas,monospace',round:'Trebuchet MS,Verdana,sans-serif',bold:'Arial Black,Impact,sans-serif'};
 function pre(s,n){const p=PRE[n];Object.assign(s,{theme:n,bg:p[0],bg2:p[1],fg:p[2],pri:p[3],acc:p[4],row:p[5],bd:p[6],font:p[7],rad:p[8],ra:n==='glassmorphism'?.18:n==='gradient'?.14:1,bl:n==='glassmorphism'?10:0,g1:'#f5b301',g2:'#aab4c3',g3:'#cd7f32'});return s}
-const defS=(n='modern dark')=>pre({size:16,fw:600,ls:0,gap:8,count:50,mode:'table',al:'left',pod:'center',order:'desc',all:true,an:'none',ans:5,pg:5,vh:60,loop:false,title:'Leaderboard',sub:'',foot:'',date:'',logo:'',bgimg:'',hid:{}},n);
-function ranked(b){const d=b.s.order==='asc'?1:-1,R=b.rows.map(r=>({...r,score:+r.score||0}));R.sort((a,c)=>d*(a.score-c.score)||a.name.localeCompare(c.name));R.forEach((r,i)=>r.rank=i&&r.score===R[i-1].score?R[i-1].rank:i+1);return R}
+const defS=(n='modern dark')=>pre({size:16,fw:600,ls:0,gap:8,count:50,mode:'table',al:'left',pod:'center',order:'desc',all:true,an:'none',ans:5,pg:5,vh:60,loop:false,period:'full',title:'Leaderboard',sub:'',foot:'',date:'',logo:'',bgimg:'',hid:{}},n);
+const pscore=(r,p)=>p&&p!=='full'&&r.x&&r.x[p]!=null?(+r.x[p]||0):(+r.score||0);
+function ranked(b){const d=b.s.order==='asc'?1:-1,R=b.rows.map(r=>({...r,score:pscore(r,b.s.period)}));R.sort((a,c)=>d*(a.score-c.score)||a.name.localeCompare(c.name));R.forEach((r,i)=>r.rank=i&&r.score===R[i-1].score?R[i-1].rank:i+1);return R}
 const ini=n=>String(n).split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
 let V={v:'dash',id:null,imp:null,q:'',cat:'',pres:false,auto:false};
 const cur=()=>S.boards.find(b=>b.id===V.id);
@@ -126,9 +127,10 @@ function sheetYear(n){const m=String(n).match(/(?:^|[^0-9])(7|8|9|10|11)(?![0-9]
 function findHeader(a){for(let i=0;i<Math.min(a.length,15);i++){const hd=(a[i]||[]).map(c=>String(c??'').trim()),ni=hd.findIndex(c=>/^(student(\s*name)?|pupil(\s*name)?|name|full\s*name)$/i.test(c)),ci={};
   hd.forEach((c,k)=>{const m=c.match(/^(?:h\.?\s*t\.?\s*|half\s*term\s*)([2-6])$/i);if(m)ci['HT'+m[1]]=k});
   if(ni>=0&&Object.keys(ci).length)return{row:i,ni,ci}}return null}
-function planImport(wb){const b=gb(),ex={};(b?b.rows:[]).forEach(r=>{ex[r.yg+'|'+r.name.toLowerCase()]=r});
+function defSel(wb){return new Set(wb.SheetNames.filter(n=>sheetYear(n)))}
+function planImport(wb,sel){sel=sel||defSel(wb);const b=gb(),ex={};(b?b.rows:[]).forEach(r=>{ex[r.yg+'|'+r.name.toLowerCase()]=r});
  const P={sheets:[],items:[],invalid:0,dups:0,skipped:0,issues:[]},seen={};
- wb.SheetNames.forEach(sn=>{const T={name:sn,yg:sheetYear(sn),rows:0,n:0,u:0,same:0,bad:0,note:''};P.sheets.push(T);
+ wb.SheetNames.forEach(sn=>{const T={name:sn,yg:sheetYear(sn),rows:0,n:0,u:0,same:0,bad:0,note:'',off:!sel.has(sn)};P.sheets.push(T);if(T.off)return;
   if(!T.yg){T.note='Skipped: no year group (7\u201311) in the sheet name';P.skipped++;return}
   const a=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:'',blankrows:false}),H=findHeader(a);
   if(!H){T.note='Skipped: no Name column with HT headers';P.skipped++;return}
@@ -140,7 +142,7 @@ function planImport(wb){const b=gb(),ex={};(b?b.rows:[]).forEach(r=>{ex[r.yg+'|'
    const old=ex[key],it={name:old?old.name:name,yg:T.yg,ht,old};seen[key]=1;
    if(!old){T.n++;it.st='new'}else if(HTN.some(k=>old.x[k]!==ht[k.toLowerCase()])){T.u++;it.st='update'}else{T.same++;it.st='same'}
    P.items.push(it)}});
- P.seenKeys=seen;P.years=[...new Set(P.sheets.filter(s=>s.yg&&!s.note).map(s=>s.yg))];return P}
+ P.seenKeys=seen;P.years=[...new Set(P.sheets.filter(s=>s.yg&&!s.note&&!s.off).map(s=>s.yg))];return P}
 async function savePlan(P,o={}){if(!ADM||!sb)return{ok:false,saved:0,msg:'Administrator access required'};
  const work=P.items.filter(i=>i.st!=='same');let saved=0,nw=0,up=0,removed=0;
  try{for(let i=0;i<work.length;i+=500){const ch=work.slice(i,i+500),pay=ch.map(x=>({student_name:x.name,year_group:x.yg,...x.ht}));
@@ -152,28 +154,30 @@ async function savePlan(P,o={}){if(!ADM||!sb)return{ok:false,saved:0,msg:'Admini
     if(error)throw error;if(!data||data.length!==c.length)throw new Error('Supabase confirmed only '+(data?data.length:0)+' of '+c.length+' deletions');removed+=c.length}}
   await refreshNow();return{ok:true,saved,nw,up,removed}}
  catch(e){try{await refreshNow()}catch(_){}return{ok:false,saved,nw,up,removed,msg:emsg(e)}}}
-function load(f){if(!ADM)return;const fr=new FileReader();fr.onload=e=>{try{const wb=XLSX.read(e.target.result,{type:'array'});V.imp={file:f.name,wb,rm:false,ok:false,busy:false,res:null};V.imp.plan=planImport(wb);render()}catch(x){toast('Could not read file: '+emsg(x))}};fr.onerror=()=>toast('File read failed');fr.readAsArrayBuffer(f)}
+function load(f){if(!ADM)return;const fr=new FileReader();fr.onload=e=>{try{const wb=XLSX.read(e.target.result,{type:'array'});V.imp={file:f.name,wb,sel:defSel(wb),rm:false,ok:false,busy:false,res:null};V.imp.plan=planImport(wb,V.imp.sel);render()}catch(x){toast('Could not read file: '+emsg(x))}};fr.onerror=()=>toast('File read failed');fr.readAsArrayBuffer(f)}
+function toggleSheet(i,on){const I=V.imp;if(!I)return;const n=I.wb.SheetNames[i];if(n===undefined)return;I.sel=I.sel||defSel(I.wb);if(on)I.sel.add(n);else I.sel.delete(n);I.rm=false;I.ok=false;I.res=null;I.plan=planImport(I.wb,I.sel);render()}
+function setAllSheets(on){const I=V.imp;if(!I)return;I.sel=on?new Set(I.wb.SheetNames):new Set();I.rm=false;I.ok=false;I.res=null;I.plan=planImport(I.wb,I.sel);render()}
 async function saveImport(){const I=V.imp;if(!I||I.busy||!ADM)return;I.busy=true;I.res=null;render();
- try{await refreshNow()}catch(e){}I.plan=planImport(I.wb);const P=I.plan,rm=I.rm&&I.ok&&P.invalid===0&&P.skipped===0;
+ try{await refreshNow()}catch(e){}I.plan=planImport(I.wb,I.sel);const P=I.plan,rm=I.rm&&I.ok&&P.invalid===0&&P.skipped===0;
  const r=await savePlan(P,{rm});I.busy=false;I.res=r;
- if(r.ok){S.imps.unshift({file:I.file,sheet:'all years',n:r.saved,date:Date.now(),board:'Leaderboard'});S.imps=S.imps.slice(0,20);save();I.plan=planImport(I.wb);I.rm=false;I.ok=false}
+ if(r.ok){S.imps.unshift({file:I.file,sheet:'all years',n:r.saved,date:Date.now(),board:'Leaderboard'});S.imps=S.imps.slice(0,20);save();I.plan=planImport(I.wb,I.sel);I.rm=false;I.ok=false}
  render();toast(r.ok?`Saved ${r.saved} student${r.saved===1?'':'s'} to Supabase`:'Import not fully saved: '+r.msg)}
 const nav=[['dash','home','Dashboard'],['boards','list','My Leaderboards'],['import','plus','Create Leaderboard'],['themes','pal','Themes'],['imports','up','Imports'],['set','set','Settings']];
 const side=()=>`<nav class="side"><div class="logo"><i>🏆</i>RankForge</div>${nav.map(n=>`<button class="nav ${V.v===n[0]||(V.v==='editor'&&n[0]==='boards')?'on':''}" data-a="nav:${n[0]}">${ic(n[1])}${n[2]}</button>`).join('')}<button class="nav" style="margin-top:auto" data-a="logout">Sign out</button></nav>`;
 const th=b=>`<div class="th"><div>${lbH(b,false)}</div></div>`;
 const bcard=b=>`<div class="card">${th(b)}<div class="row"><b class="sp">${esc(b.name)}</b><button class="btn s" data-a="fav:${b.id}" title="Favourite" style="${b.fav?'color:#f5b301':''}">${ic('star')}</button></div><div style="color:var(--m);font-size:12px;margin:4px 0 10px">${b.rows.length} participants · Created ${dt(b.created)} · Edited ${dt(b.modified)}</div><div class="row"><button class="btn s p" data-a="open:${b.id}">Edit</button><button class="btn s" data-a="dup:${b.id}">${ic('copy')}Duplicate</button><button class="btn s" data-a="del:${b.id}">${ic('del')}</button></div></div>`;
 const empty=(t,a)=>`<div class="empty"><p>${t}</p>${a||''}</div>`;
-function main(){const B=S.boards;
+function main(){const B=S.boards.filter(b=>b.id!=='global'||b.hasDesign);
  if(V.v==='dash'){const rc=[...B].sort((a,c)=>c.modified-a.modified),fv=B.filter(b=>b.fav);
   return `<div class="row"><div class="sp"><h2>Dashboard</h2><p class="sb">Everything you’ve built, in one place.</p></div><button class="btn p" data-a="nav:import">${ic('plus')}Quick create</button></div>
-  <div class="stats"><div class="card"><b>${B.length}</b><span>Leaderboards</span></div><div class="card"><b>${B.reduce((n,b)=>n+b.rows.length,0)}</b><span>Participants</span></div><div class="card"><b>${S.themes.length}</b><span>Saved themes</span></div><div class="card"><b>${S.imps.length}</b><span>Imports</span></div></div>
+  <div class="stats"><div class="card"><b>${B.length}</b><span>Leaderboards</span></div><div class="card"><b>${S.boards.reduce((n,b)=>n+b.rows.length,0)}</b><span>Participants</span></div><div class="card"><b>${S.themes.length}</b><span>Saved themes</span></div><div class="card"><b>${S.imps.length}</b><span>Imports</span></div></div>
   <h3>Recently edited</h3>${B.length?`<div class="grid">${rc.slice(0,6).map(bcard).join('')}</div>`:empty('No leaderboards yet.',`<button class="btn p" data-a="nav:import">Import a spreadsheet</button>`)}
   <h3>Favourites</h3>${fv.length?`<div class="grid">${fv.map(bcard).join('')}</div>`:empty('Star a leaderboard to pin it here.')}
   <h3>Recent imports</h3>${impList()}`}
  if(V.v==='boards')return `<h2>My Leaderboards</h2><p class="sb">${B.length} saved locally in this browser.</p>${B.length?`<div class="grid">${B.map(bcard).join('')}</div>`:empty('Nothing here yet.')}`;
  if(V.v==='import')return impV();
  if(V.v==='imports')return `<h2>Imports</h2><p class="sb">History of spreadsheets you’ve imported.</p>${impList()}`;
- if(V.v==='themes')return `<h2>Themes</h2><p class="sb">Built-in presets and your saved themes. Apply them inside the editor.</p><h3>Saved themes</h3>${S.themes.length?`<div class="grid">${S.themes.map((t,i)=>`<div class="card"><div style="height:46px;border-radius:8px;background:linear-gradient(135deg,${t.s.bg},${t.s.bg2});border:1px solid var(--l)"></div><div class="row" style="margin-top:8px"><b class="sp">${esc(t.name)}</b><button class="btn s" data-a="delth:${i}">${ic('del')}</button></div></div>`).join('')}</div>`:empty('Open a leaderboard, tune the design, and click “Save theme”.')}<h3>Built-in</h3><div class="grid">${Object.keys(PRE).map(n=>{const p=PRE[n];return `<div class="card"><div style="height:46px;border-radius:8px;background:linear-gradient(135deg,${p[0]},${p[1]});border:1px solid var(--l);display:flex;gap:6px;padding:12px"><i style="width:22px;height:22px;border-radius:50%;background:${p[3]}"></i><i style="width:22px;height:22px;border-radius:50%;background:${p[4]}"></i></div><b style="text-transform:capitalize;display:block;margin-top:8px">${n}</b></div>`}).join('')}</div>`;
+ if(V.v==='themes')return `<h2>Themes</h2><p class="sb">Built-in presets and your saved themes. Apply them inside the editor.</p><h3>Saved themes</h3>${S.themes.length?`<div class="grid">${S.themes.map((t,i)=>`<div class="card"><div style="height:46px;border-radius:8px;background:linear-gradient(135deg,${t.s.bg},${t.s.bg2});border:1px solid var(--l)"></div><div class="row" style="margin-top:8px"><b class="sp">${esc(t.name)}</b><button class="btn s" data-a="delth:${i}">${ic('del')}</button></div></div>`).join('')}</div>`:empty('Open a leaderboard, tune the design, and click “Save theme”.')}<h3>Built-in <small style="color:var(--m);font-weight:400">(protected, can’t be deleted)</small></h3><div class="grid">${Object.keys(PRE).map(n=>{const p=PRE[n];return `<div class="card"><div style="height:46px;border-radius:8px;background:linear-gradient(135deg,${p[0]},${p[1]});border:1px solid var(--l);display:flex;gap:6px;padding:12px"><i style="width:22px;height:22px;border-radius:50%;background:${p[3]}"></i><i style="width:22px;height:22px;border-radius:50%;background:${p[4]}"></i></div><b style="text-transform:capitalize;display:block;margin-top:8px">${n}</b></div>`}).join('')}</div>`;
  if(V.v==='set')return `<h2>Settings</h2><p class="sb">Shared design and student data are stored in Supabase.</p><div class="card" style="max-width:520px"><div class="row"><span class="sp">Dark mode</span><input type="checkbox" data-a="dark" ${S.dark?'checked':''}></div><hr style="border:0;border-top:1px solid var(--l)"><div class="row"><span class="sp">Example import spreadsheet</span><button class="btn s" data-a="tpl">${ic('dl')}Download</button></div><hr style="border:0;border-top:1px solid var(--l)"><div class="row"><span class="sp"><b>Account</b><br><small style="color:var(--m)">Signed in as ${ADM?'administrator':'viewer'}</small></span><button class="btn s" data-a="logout">Sign out</button></div><hr style="border:0;border-top:1px solid var(--l)"><div class="row"><span class="sp">Clear saved themes and import history</span><button class="btn s" data-a="wipe">${ic('del')}Reset everything</button></div></div>`;
  if(V.v==='editor'&&cur())return editor(cur());V.v='dash';return main()}
 const impList=()=>S.imps.length?`<div class="card"><table>${S.imps.slice(0,10).map(i=>`<tr><td>${esc(i.file)} <span style="color:var(--m)">(${esc(i.sheet)})</span></td><td>${i.n} rows</td><td>→ ${esc(i.board)}</td><td>${dt(i.date)}</td></tr>`).join('')}</table></div>`:empty('No imports yet.');
@@ -182,9 +186,9 @@ function impV(){const I=V.imp;
  const P=I.plan,b=gb(),work=P.items.filter(i=>i.st!=='same').length,canRm=P.invalid===0&&P.skipped===0&&P.years.length>0,R=I.res,
   rmN=canRm&&b?b.rows.filter(r=>P.years.includes(r.yg)&&!P.seenKeys[r.yg+'|'+r.name.toLowerCase()]).length:0;
  return `<h2>Import: ${esc(I.file)}</h2><p class="sb">Review the sheets, then save. Nothing is written to Supabase until you click Save.</p>
- <div class="card" style="overflow:auto"><table><tr><th>Sheet</th><th>Year</th><th>Rows</th><th>New</th><th>Updated</th><th>Unchanged</th><th>Problems</th></tr>${P.sheets.map(s=>`<tr><td>${esc(s.name)}</td><td>${s.yg??'\u2013'}</td><td>${s.rows}</td><td>${s.n}</td><td>${s.u}</td><td>${s.same}</td><td>${s.note?`<span class="iss">${esc(s.note)}</span>`:s.bad}</td></tr>`).join('')}</table></div>
+ <div class="card" style="overflow:auto"><div class="row" style="margin-bottom:8px"><b class="sp">Worksheets to import</b><button class="btn s" data-a="shall">Select all</button><button class="btn s" data-a="shnone">Deselect all</button></div><table><tr><th></th><th>Worksheet</th><th>Year</th><th>Rows</th><th>New</th><th>Updated</th><th>Unchanged</th><th>Problems</th></tr>${P.sheets.map((s,i)=>`<tr${s.off?' style="opacity:.55"':''}><td><input type="checkbox" data-sh="${i}" ${s.off?'':'checked'}></td><td>${esc(s.name)}</td><td>${s.yg??'\u2013'}</td><td>${s.rows}</td><td>${s.n}</td><td>${s.u}</td><td>${s.same}</td><td>${s.off?'Not selected':s.note?`<span class="iss">${esc(s.note)}</span>`:s.bad}</td></tr>`).join('')}</table></div>
  ${P.issues.length?`<div class="iss">${P.issues.slice(0,8).map(x=>esc(x)).join('<br>')}${P.issues.length>8?`<br>\u2026and ${P.issues.length-8} more`:''}</div>`:''}
- <p><b>${work}</b> student${work===1?'':'s'} will be written (new or changed). Students missing from the workbook are <b>not</b> deleted unless you choose below.</p>
+ <p><b>${work}</b> student${work===1?'':'s'} will be written (new or changed) from ${P.sheets.filter(s=>!s.off).length} of ${P.sheets.length} worksheets. Year groups you did not select are never touched. Students missing from the workbook are <b>not</b> deleted unless you choose below.</p>
  ${rmN?`<label style="display:block"><input type="checkbox" data-i="rm" ${I.rm?'checked':''}> Also remove ${rmN} student${rmN===1?'':'s'} in Year ${P.years.join(', ')} who are not in this workbook</label>${I.rm?`<label style="display:block;color:#dc2626"><input type="checkbox" data-i="ok" ${I.ok?'checked':''}> I understand these ${rmN} records will be permanently deleted</label>`:''}`:''}
  ${R?`<div class="card" style="margin:10px 0;border-color:${R.ok?'#16a34a':'#dc2626'}">${R.ok?`Saved to Supabase: ${R.nw} new, ${R.up} updated${R.removed?`, ${R.removed} removed`:''}.`:`Not fully saved: ${esc(R.msg)}${R.saved?` (${R.saved} students were saved before the error)`:''}`}</div>`:''}
  <div class="row"><button class="btn p" data-a="commit" ${I.busy||(!work&&!(I.rm&&I.ok&&rmN))?'disabled':''}>${I.busy?'Saving\u2026':'Save to Supabase'}</button><button class="btn" data-a="cancelimp">${R&&R.ok?'Done':'Cancel'}</button></div>`}
@@ -196,7 +200,7 @@ function editor(b){const s=b.s;return `<div class="eh"><input class="tt" data-n=
  <details><summary>Layout</summary>${sel('mode','Display',[['table','Table'],['podium','Podium + list'],['cards','Cards']],s)}${sel('pod','Podium order',[['center','1st in centre'],['left','1-2-3 left to right']],s)}${sel('al','Alignment',[['left','Left'],['center','Centre'],['right','Right']],s)}${rg('gap','Row spacing',0,24,s)}${rg('rad','Corner radius',0,28,s)}<label>Show all participants<input type="checkbox" data-k="all" ${s.all?'checked':''}></label>${rg('count','Visible rows (if not all)',3,100,s)}</details>
  <details><summary>Animation</summary>${sel('an','Style',[['none','None (static)'],['scroll','Smooth auto-scroll'],['pages','Page flip'],['spotlight','Spotlight each row'],['cascade','Cascade in (1st → last)'],['countdown','Countdown (last → 1st)']],s)}${rg('ans','Speed',1,10,s)}${rg('pg','Rows per page',3,15,s)}${rg('vh','Scroll window height',30,90,s)}<label>Loop reveals<input type="checkbox" data-k="loop" ${s.loop?'checked':''}></label><p style="color:var(--m);font-size:11px;margin:4px 0">Plays in the preview, Present mode and live links. The podium stays fixed while the list below it animates.</p></details><details><summary>Branding</summary>${tx('title','Title',s)}${tx('sub','Subtitle',s)}${tx('date','Dates',s)}${tx('foot','Footer',s)}<label>Logo<input type="file" accept="image/*" data-f="logo"></label><label>Background image<input type="file" accept="image/*" data-f="bgimg"></label><button class="btn s" data-a="clrimg">Remove images</button></details></aside>
  <section class="cn"><div id="pv"></div></section>
- <aside class="pn"><details open><summary>Ranking & filters</summary>${sel('order','Order',[['desc','Highest first'],['asc','Lowest first']],s)}<label>Search<input data-q="1" value="${esc(V.q)}" placeholder="Name…"></label><label>Category<select data-c="1"><option value="">All</option>${[...new Set(b.rows.map(r=>r.cat).filter(Boolean))].map(c=>`<option ${V.cat===c?'selected':''}>${esc(c)}</option>`).join('')}</select></label></details>
+ <aside class="pn"><details open><summary>Ranking & filters</summary>${sel('period','Scoring period',[['full','Full Year'],['HT2','HT2'],['HT3','HT3'],['HT4','HT4'],['HT5','HT5'],['HT6','HT6']],s)}${sel('order','Order',[['desc','Highest first'],['asc','Lowest first']],s)}<label>Search<input data-q="1" value="${esc(V.q)}" placeholder="Name…"></label><label>Category<select data-c="1"><option value="">All</option>${[...new Set(b.rows.map(r=>r.cat).filter(Boolean))].map(c=>`<option ${V.cat===c?'selected':''}>${esc(c)}</option>`).join('')}</select></label></details>
  <details><summary>Visible columns</summary>${[['rank','Rank badge'],['cat','Category'],['mv','Movement'],...(b.extra||[]).map(c=>['x:'+c,c])].map(c=>`<label>${esc(c[1])}<input type="checkbox" data-h="${esc(c[0])}" ${s.hid[c[0]]?'':'checked'}></label>`).join('')}</details>
  <details open><summary>Participants (${b.rows.length})</summary><div class="sc2"><table id="ptab">${ptab(b)}</table></div><div class="row" style="margin-top:8px"><input id="anm" placeholder="New student name" style="flex:1;min-width:80px"><select id="ayg">${[7,8,9,10,11].map(y=>`<option>${y}</option>`).join('')}</select><button class="btn s p" data-a="addrow">Add</button></div><div class="row" style="margin-top:8px"><button class="btn s" data-a="clrscore">Zero scores</button><button class="btn s" data-a="clrall">Clear all</button><button class="btn s" data-a="resetd">Reset design</button><button class="btn s" data-a="upd">Import update</button></div><div class="row" style="margin-top:8px">${V.lk&&V.lk.id===b.id?`<span class="sp" style="font-size:12px;color:#16a34a">● Live: ${esc(V.lk.name)}</span><button class="btn s" data-a="unlink">Unlink</button>`:`<button class="btn s p" data-a="linkfile">Link live spreadsheet file</button>`}</div><p style="color:var(--m);font-size:11px">A linked file is checked twice a second: save the sheet in Excel and the leaderboard, including Present mode, updates. Names are matched; blank scores count as 0.</p></details>
  <details open><summary>Export & share</summary><div class="row"><button class="btn s" data-a="x:png">PNG</button><button class="btn s" data-a="x:pdf">PDF / Print</button><button class="btn s" data-a="x:csv">CSV</button><button class="btn s" data-a="x:xlsx">Excel</button><button class="btn s" data-a="x:html">Public HTML</button></div><p style="color:var(--m);font-size:12px">“Public HTML” downloads a static read-only snapshot you can host yourself.</p></details></aside></div>`}
@@ -244,7 +248,7 @@ function swapLb(host,html,keep,noFx){const o=host.querySelector('.lb'),L0=o&&o.q
  if(o)o.outerHTML=html;else host.innerHTML=html;
  const nb=host.querySelector('.lb');if(!nb)return;const an=nb.dataset.an;
  if(keep&&(an==='cascade'||an==='countdown'))clrAn();else runAn(host,keep?y:0);
- if(o&&!noFx)fx(nb,oA,oP)}
+ if(o&&!noFx&&!NOFX)fx(nb,oA,oP);NOFX=false}
 function fx(nb,oA,oP){const msg=[];
  nb.querySelectorAll('[data-n]').forEach(e=>{const n=e.dataset.n,o=oA[n],s=+e.dataset.s,r=+e.dataset.r,pod=!!e.closest('.pod'),R=e.getBoundingClientRect();
   if(!o){if(R.height&&!pod)e.animate([{opacity:0,transform:'scale(.9)'},{opacity:1,transform:'none'}],{duration:500});msg.push(n+' joined');return}
@@ -276,10 +280,10 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-a]');if(!t
  if(a==='nav'){V.v=g;V.imp=null;render()}else if(a==='open'){V.id=g;V.v='editor';V.q='';V.cat='';render()}
  else if(a==='fav'){const x=S.boards.find(b=>b.id===g);x.fav=x.fav?0:1;save();render()}
  else if(a==='dup'){const x=S.boards.find(b=>b.id===g),c=JSON.parse(JSON.stringify(x));c.id=uid();delete c.pub;c.name+=' (copy)';c.created=c.modified=Date.now();S.boards.unshift(c);save();render();toast('Duplicated')}
- else if(a==='del'){const x=S.boards.find(b=>b.id===g);if(g==='global')return toast('The shared leaderboard can’t be deleted');S.boards=S.boards.filter(b=>b.id!==g);save();render()}
+ else if(a==='del'){const x=S.boards.find(b=>b.id===g);if(g==='global')return delShared();S.boards=S.boards.filter(b=>b.id!==g);save();render()}
  else if(a==='delth'){S.themes.splice(+g,1);save();render()}else if(a==='tpl')sheetTpl();
  else if(a==='wipe'){S.themes=[];S.imps=[];save();render()}
- else if(a==='commit')saveImport();else if(a==='cancelimp'){V.imp=null;V.v='editor';V.id='global';render()}
+ else if(a==='commit')saveImport();else if(a==='shall')setAllSheets(true);else if(a==='shnone')setAllSheets(false);else if(a==='cancelimp'){V.imp=null;V.v='editor';V.id='global';render()}
  else if(a==='pres'){V.pres=true;pres();document.documentElement.requestFullscreen?.().catch(()=>{})}else if(a==='exitp')exitp();
  else if(a==='savetheme'){const n=prompt('Theme name?');if(n){const{title,sub,foot,date,logo,bgimg,...th}=b.s;S.themes.push({name:n,s:JSON.parse(JSON.stringify(th))});save();render();toast('Theme saved')}}
  else if(a==='clrimg'){b.s.logo=b.s.bgimg='';touch(b);pv()}
@@ -292,6 +296,7 @@ document.addEventListener('input',e=>{const t=e.target,b=cur(),d=t.dataset;if(!A
  if(d.a==='dark'){S.dark=t.checked;save();render();return}
  
  if(d.vq!==undefined||d.vc!==undefined){if(d.vq!==undefined)V.q=t.value;else V.cat=t.value;const p=$('#pv');if(p&&gb())swapLb(p,lbH(gb(),true),false,true);return}
+ if(d.sh!==undefined){toggleSheet(+d.sh,t.checked);return}
  if(d.i!==undefined){const I=V.imp;if(!I)return;if(d.i==='rm'){I.rm=t.checked;if(!t.checked)I.ok=false}else if(d.i==='ok')I.ok=t.checked;render();return}
  
  if(!b)return;
@@ -314,7 +319,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id==='pin')
 document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&V.pres)exitp()});
 // ---------- Supabase: PIN access, shared design settings, live updates
 const SB_URL='https://rorgcdgptltqdhmxnzvb.supabase.co',SB_KEY='sb_publishable_XfUIRcYbUtHga_d4zhM40w_HhNzkLzH',PIN_FN=SB_URL+'/functions/v1/verify-pin';
-const CK=['bg','bg2','fg','pri','acc','row','bd','g1','g2','g3'],NK={size:[10,40],fw:[100,900],ls:[-2,10],gap:[0,40],rad:[0,40],ra:[0,1],bl:[0,40],count:[1,1000],ans:[1,10],pg:[1,50],vh:[20,95]},EN={mode:['table','podium','cards'],pod:['center','left'],al:['left','center','right'],order:['desc','asc'],an:['none','scroll','pages','spotlight','cascade','countdown']};
+const CK=['bg','bg2','fg','pri','acc','row','bd','g1','g2','g3'],NK={size:[10,40],fw:[100,900],ls:[-2,10],gap:[0,40],rad:[0,40],ra:[0,1],bl:[0,40],count:[1,1000],ans:[1,10],pg:[1,50],vh:[20,95]},EN={mode:['table','podium','cards'],pod:['center','left'],al:['left','center','right'],order:['desc','asc'],an:['none','scroll','pages','spotlight','cascade','countdown'],period:['full','HT2','HT3','HT4','HT5','HT6']};
 let sb=null,SES=false,ADM=false,AUTHR=false,BOOT=null,GCH=null,sT=null,rT=null,dirty=false,lastSave=0,lastJ='',busy=false;
 const gb=()=>S.boards.find(b=>b.id==='global'),keyOK=()=>!!window.supabase&&/^(sb_publishable_|eyJ)/.test(SB_KEY);
 function cleanS(o){const d=defS(),s=o&&typeof o==='object'?o:{};
@@ -350,18 +355,18 @@ const fromDB=r=>({id:String(r.id),name:String(r.student_name??''),score:+r.full_
 async function loadRows(){const all=[];let total=null;for(;;){const{data,error,count}=await sb.from('student_points').select(COLS,{count:'exact'}).order('id').range(all.length,all.length+999);if(error)throw error;if(total===null)total=count==null?-1:count;all.push(...data);if(!data.length||(total>=0&&all.length>=total))break}return all.map(fromDB)}
 async function loadAll(){const[st,rows]=await Promise.all([sb.from('rankforge_settings').select('settings').eq('id','global').maybeSingle(),loadRows()]);if(st.error)throw st.error;
  const s=cleanS(st.data?.settings);if(!st.data)s.title='Leaderboard';lastJ=JSON.stringify(s);
- S.boards=[{id:'global',name:'Leaderboard',created:Date.now(),modified:Date.now(),fav:0,rows,_rj:JSON.stringify(rows),extra:['HT2','HT3','HT4','HT5','HT6'],s}]}
+ S.boards=[{id:'global',name:'Leaderboard',created:Date.now(),modified:Date.now(),fav:0,rows,_rj:JSON.stringify(rows),hasDesign:!!st.data,extra:['HT2','HT3','HT4','HT5','HT6'],s}]}
 function setStat(t,c){const e=$('#sv');if(e){e.textContent=t;e.style.color=c||'var(--m)'}}
 function queueSet(){const b=gb();if(!ADM||!sb||!b||JSON.stringify(b.s)===lastJ)return;dirty=true;setStat('Unsaved changes\u2026');clearTimeout(sT);sT=setTimeout(saveSet,1500)}
 async function saveSet(){if(!ADM||!sb)return;clearTimeout(sT);const b=gb();if(!b)return;setStat('Saving\u2026');
  try{const{data}=await sb.auth.getSession(),uid=data?.session?.user?.id,snap=JSON.stringify(b.s);
   const{error}=await sb.from('rankforge_settings').upsert({id:'global',settings:cleanS(b.s),updated_at:new Date().toISOString(),updated_by:uid},{onConflict:'id'});if(error)throw error;
-  lastJ=snap;dirty=JSON.stringify(b.s)!==snap;lastSave=Date.now();setStat('Saved \u2713 '+new Date().toLocaleTimeString('en-GB'),'#16a34a');toast('Design saved for all viewers')}
+  b.hasDesign=true;lastJ=snap;dirty=JSON.stringify(b.s)!==snap;lastSave=Date.now();setStat('Saved \u2713 '+new Date().toLocaleTimeString('en-GB'),'#16a34a');toast('Design saved for all viewers')}
  catch(e){setStat('Save failed','#dc2626');toast('Could not save design: '+(e.message||'permission denied'));recheck()}}
 async function recheck(){try{const{data}=await sb.rpc('rankforge_is_admin');if(data!==true&&ADM){ADM=false;V.v='view';render()}}catch(e){}}
 const scrub=s=>String(s??'').replace(/eyJ[\w-]{8,}\.[\w-]+\.[\w-]*/g,'[token]').replace(/sb_(publishable|secret)_[\w-]+/g,'[key]').replace(/Bearer\s+\S+/gi,'Bearer [redacted]');
 const dbg=(m,st,err)=>{try{console.warn('[RankForge] '+m,st??'',err?{name:err.name||'',message:scrub(err.message||err)}:'')}catch(e){}};
-let SEP=0,RT='',rtLive=false,rtFailed=false,PT=null,PIF=false,PFAIL=0,PEP=0;
+let NOFX=false,SEP=0,RT='',rtLive=false,rtFailed=false,PT=null,PIF=false,PFAIL=0,PEP=0;
 const RTL={live:['Live updates connected','#22c55e'],poll:['Using automatic updates','#f59e0b'],recon:['Reconnecting\u2026','#f59e0b'],down:['Updates temporarily unavailable','#ef4444']};
 function setRT(s){if(RT===s)return;RT=s;let e=$('#rtchip');if(!s||!SES){RT=s||'';if(e)e.remove();return}
  if(!e){e=document.createElement('div');e.id='rtchip';document.body.appendChild(e)}e.textContent='';const d=document.createElement('i');d.style.background=RTL[s][1];e.appendChild(d);e.appendChild(document.createTextNode(RTL[s][0]))}
@@ -377,10 +382,18 @@ async function subscribe(){
   if(GCH!==ch||!SES)return;
   if(status==='SUBSCRIBED')return rtOK();
   if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED')rtFail(status,err)})}
-function onSet(p){if(p.eventType==='DELETE'||!p.new?.settings)return;applySettings(p.new.settings)}
-function applySettings(raw){const b=gb();if(!b||!raw)return;if(ADM&&(dirty||Date.now()-lastSave<4000||JSON.stringify(b.s)!==lastJ))return;
- const s=cleanS(raw),j=JSON.stringify(s);if(j===JSON.stringify(b.s))return;b.s=s;lastJ=j;
+function onSet(p){if(p.eventType==='DELETE'){if(!p.old||!p.old.id||p.old.id==='global')applySettings(null,true);return}if(!p.new||(p.new.id&&p.new.id!=='global')||!p.new.settings)return;applySettings(p.new.settings)}
+function applySettings(raw,gone){const b=gb();if(!b)return;if(raw==null&&!gone)return;const had=b.hasDesign,has=raw!=null&&!gone;b.hasDesign=has;
+ if(had!==has&&ADM&&(V.v==='dash'||V.v==='boards'))render();
+ if(ADM&&(dirty||Date.now()-lastSave<4000||JSON.stringify(b.s)!==lastJ))return;
+ const old=b.s.period,s=cleanS(has?raw:{}),j=JSON.stringify(s);if(j===JSON.stringify(b.s))return;b.s=s;lastJ=j;if(s.period!==old)NOFX=true;
  if(V.pres)presUpdate();else if(!ADM)vpaint(true);else render()}
+async function delShared(){if(!ADM||!sb)return;const b=gb();if(!b)return;
+ if(!confirm('Delete the shared design?\n\nThis removes the saved design settings for everyone who has access. Other users will switch to the default design the next time their screen updates, and any unsaved changes will be lost. Student records are not affected.\n\nThis cannot be undone.'))return;
+ try{const{data,error}=await sb.from('rankforge_settings').delete().eq('id','global').select('id');if(error)throw error;
+  if(!data||data.length!==1){await recheck();return toast('Not deleted: the shared design was already removed or you lack permission.')}
+  clearTimeout(sT);dirty=false;b.s=cleanS({});lastJ=JSON.stringify(b.s);b.hasDesign=false;lastSave=Date.now();render();toast('Shared design deleted')}
+ catch(e){toast('Could not delete the shared design: '+emsg(e))}}
 function applyRows(rows){const b=gb();if(!b||!rows)return;const j=JSON.stringify(rows);if(j===b._rj)return;
  if(ADM&&JSON.stringify(b.rows)!==b._rj)return;
  const ids=b.rows.map(r=>r.id).join();b.rows=rows;b._rj=j;
@@ -422,7 +435,7 @@ async function pollOnce(){if(PIF||!SES||!sb||document.hidden)return;PIF=true;con
   if(ep!==PEP||!SES)return;
   const sOK=a.status==='fulfilled'&&!a.value.error,rOK=r.status==='fulfilled';
   if(!sOK&&!rOK)throw (a.status==='rejected'?a.reason:a.value.error)||r.reason||new Error('poll failed');
-  if(sOK)applySettings(a.value.data?.settings);if(rOK)applyRows(r.value);
+  if(sOK)applySettings(a.value.data?a.value.data.settings:null,!a.value.data);if(rOK)applyRows(r.value);
   PFAIL=0;if(!rtLive&&PT)setRT('poll')}
  catch(e){if(ep!==PEP)return;PFAIL++;dbg('Polling failed','',e);if(!rtLive&&PFAIL>=2)setRT('down');
   sb.auth.getSession().then(x=>{if(!x.data.session&&SES)authChanged('SIGNED_OUT',null)}).catch(()=>{})}
